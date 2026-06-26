@@ -5,6 +5,7 @@ const AuthContext = createContext(null)
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
+  const [refreshToken, setRefreshToken] = useState(localStorage.getItem('refresh_token'))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -59,7 +60,9 @@ export const AuthProvider = ({ children }) => {
 
       const data = await response.json()
       localStorage.setItem('auth_token', data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
       setToken(data.access_token)
+      setRefreshToken(data.refresh_token)
       setUser(data.user)
       return { success: true }
     } catch (err) {
@@ -85,6 +88,10 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json()
       if (data.access_token) {
         localStorage.setItem('auth_token', data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem('refresh_token', data.refresh_token)
+          setRefreshToken(data.refresh_token)
+        }
         setToken(data.access_token)
         setUser(data.user)
       }
@@ -95,9 +102,40 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const refreshAccessToken = async () => {
+    if (!refreshToken) {
+      setError('No refresh token available')
+      return { success: false }
+    }
+
+    try {
+      const response = await fetch('http://localhost:8000/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail?.message || 'Token refresh failed')
+      }
+
+      const data = await response.json()
+      localStorage.setItem('auth_token', data.access_token)
+      setToken(data.access_token)
+      return { success: true }
+    } catch (err) {
+      setError(err.message)
+      logout()
+      return { success: false, error: err.message }
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
     setToken(null)
+    setRefreshToken(null)
     setUser(null)
     setError(null)
   }
@@ -114,6 +152,7 @@ export const AuthProvider = ({ children }) => {
         signup,
         login,
         verifyEmail,
+        refreshAccessToken,
         logout,
         clearError,
         isAuthenticated: !!token,

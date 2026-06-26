@@ -7,22 +7,21 @@ export default function Signup() {
   const { signup, error, clearError } = useAuth()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+    first_name: '',
+    last_name: '',
     email: '',
     password: '',
-    confirmPassword: '',
   })
   const [validationErrors, setValidationErrors] = useState({})
 
   const validateForm = () => {
     const errors = {}
 
-    if (!formData.firstName.trim()) {
-      errors.firstName = 'First name is required'
+    if (!formData.first_name.trim()) {
+      errors.first_name = 'First name is required'
     }
-    if (!formData.lastName.trim()) {
-      errors.lastName = 'Last name is required'
+    if (!formData.last_name.trim()) {
+      errors.last_name = 'Last name is required'
     }
     if (!formData.email.trim()) {
       errors.email = 'Email is required'
@@ -39,9 +38,6 @@ export default function Signup() {
       errors.password = 'Password must contain at least one number'
     } else if (!/[!@#$%^&*]/.test(formData.password)) {
       errors.password = 'Password must contain at least one special character (!@#$%^&*)'
-    }
-    if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match'
     }
 
     return errors
@@ -69,14 +65,12 @@ export default function Signup() {
     const result = await signup(
       formData.email,
       formData.password,
-      formData.firstName,
-      formData.lastName
+      formData.first_name,
+      formData.last_name
     )
 
     if (result.success) {
-      navigate('/verify-email', {
-        state: { userId: result.userId, email: formData.email },
-      })
+      navigate('/login')
     }
     setLoading(false)
   }
@@ -102,16 +96,16 @@ export default function Signup() {
             </label>
             <input
               type="text"
-              name="firstName"
-              value={formData.firstName}
+              name="first_name"
+              value={formData.first_name}
               onChange={handleChange}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                validationErrors.firstName ? 'border-red-500' : 'border-gray-300'
+                validationErrors.first_name ? 'border-red-500' : 'border-gray-300'
               }`}
               placeholder="John"
             />
-            {validationErrors.firstName && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
+            {validationErrors.first_name && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.first_name}</p>
             )}
           </div>
 
@@ -121,16 +115,16 @@ export default function Signup() {
             </label>
             <input
               type="text"
-              name="lastName"
-              value={formData.lastName}
+              name="last_name"
+              value={formData.last_name}
               onChange={handleChange}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                validationErrors.lastName ? 'border-red-500' : 'border-gray-300'
+                validationErrors.last_name ? 'border-red-500' : 'border-gray-300'
               }`}
               placeholder="Doe"
             />
-            {validationErrors.lastName && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
+            {validationErrors.last_name && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.last_name}</p>
             )}
           </div>
 
@@ -173,25 +167,6 @@ export default function Signup() {
             <p className="mt-2 text-xs text-gray-500">
               Must be 8+ characters with uppercase, number, and special character (!@#$%^&*)
             </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                validationErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="••••••••"
-            />
-            {validationErrors.confirmPassword && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
-            )}
           </div>
 
           <button

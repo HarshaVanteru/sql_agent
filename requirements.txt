@@ -5,6 +5,7 @@ langchain_groq
 langgraph
 sqlalchemy
 pymysql
+psycopg2-binary
+pymongo
 python-dotenv
 pydantic
-psycopg2-binary

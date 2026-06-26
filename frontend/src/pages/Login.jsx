@@ -45,7 +45,7 @@ export default function Login() {
     const result = await login(formData.email, formData.password)
 
     if (result.success) {
-      navigate('/dashboard')
+      navigate('/app')
     }
     setLoading(false)
   }
