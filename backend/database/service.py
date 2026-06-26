@@ -6,7 +6,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import Database, DatabaseCredential
+from backend.database.models import Database, DatabaseCredential
+from backend.query.prompts import get_default_prompt
 from .schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
     DatabaseCredentialInput
@@ -39,12 +40,22 @@ async def create_database(
     db_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
+    # Get default prompt for the database type
+    try:
+        default_prompt = get_default_prompt(body.db_type)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "UNSUPPORTED_DB_TYPE", "message": str(e)},
+        )
+
     # Create database
     database = Database(
         id=db_id,
         user_id=user_id,
         name=body.name,
         db_type=body.db_type,
+        system_prompt=default_prompt,
         created_at=now,
         updated_at=now,
     )

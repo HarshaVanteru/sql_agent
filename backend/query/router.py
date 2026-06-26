@@ -32,5 +32,10 @@ async def query_natural_language(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> NaturalLanguageQueryResponse:
-    """Execute a natural language query (converts to SQL using LLM)."""
+    """Execute a natural language query (converts to SQL/MongoDB query using LLM).
+
+    Supports:
+    - MySQL & PostgreSQL: Converts to SQL
+    - MongoDB: Converts to MongoDB query or aggregation pipeline
+    """
     return await execute_natural_language_query(str(current_user.id), database_id, body, db)

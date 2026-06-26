@@ -1,7 +1,7 @@
 """Clear all cache from Redis, including rate limits."""
 import asyncio
 import redis.asyncio as aioredis
-from signup._core import get_settings
+from backend.auth._core import get_settings
 
 
 async def clear_all_cache():

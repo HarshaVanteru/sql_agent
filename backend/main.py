@@ -5,6 +5,10 @@ from backend.auth.signout import router as signout_router
 from backend.auth.signup import router as signup_router
 from backend.database.router import router as database_router
 from backend.query.router import router as query_router
+from backend.logging_config import setup_logging
+
+# Initialize logging
+setup_logging()
 
 app = FastAPI()
 

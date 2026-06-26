@@ -164,25 +164,11 @@ async def execute_natural_language_query(
             client = create_mongodb_connection(creds.host, creds.port, creds.username, creds.password, creds.database_name)
             logger.info(f"MongoDB client created for {creds.host}:{creds.port}/{creds.database_name}")
 
-            # For MongoDB, we need to get a collection name or let the agent handle it
-            # For now, we'll get the first collection from the database
-            mongo_db = client[creds.database_name]
-            collections = mongo_db.list_collection_names()
-            if not collections:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"code": "NO_COLLECTIONS", "message": "MongoDB database has no collections"},
-                )
-
-            # Use the first collection as default (user can specify in their question)
-            collection_name = collections[0]
-
             logger.info(f"Running NoSQL pipeline for question: {body.question[:100]}...")
             pipeline_result = run_nosql_pipeline(
                 question=body.question,
                 client=client,
                 database_name=creds.database_name,
-                collection_name=collection_name,
                 history=[],
                 system_prompt=database.system_prompt,
             )

@@ -4,7 +4,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, Enum, ForeignKey,
@@ -12,6 +12,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
+if TYPE_CHECKING:
+    from backend.database.models import Database
 
 
 class Base(DeclarativeBase):
@@ -94,7 +97,10 @@ class User(Base):
     )
     sessions: Mapped[list[Session]] = relationship(back_populates="user")
     user_roles: Mapped[list[UserRole]] = relationship(back_populates="user")
-    databases: Mapped[list[Database]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    databases: Mapped[list[Database]] = relationship(
+        "Database", back_populates="user", cascade="all, delete-orphan",
+        foreign_keys="Database.user_id"
+    )
 
 
 class UserProfile(Base):
@@ -338,54 +344,3 @@ class RateLimitEvent(Base):
     )
 
 
-class Database(Base):
-    __tablename__ = "databases"
-    __table_args__ = (
-        UniqueConstraint("name", "user_id", name="uq_databases_name_user"),
-    )
-
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    db_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    user: Mapped[User] = relationship(back_populates="databases")
-    credentials: Mapped[list[DatabaseCredential]] = relationship(
-        back_populates="database", cascade="all, delete-orphan", uselist=False
-    )
-
-
-class DatabaseCredential(Base):
-    __tablename__ = "database_credentials"
-
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    database_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("databases.id", ondelete="CASCADE"),
-        nullable=False, unique=True, index=True,
-    )
-    host: Mapped[str] = mapped_column(String(255), nullable=False)
-    port: Mapped[int] = mapped_column(Integer, nullable=False)
-    username: Mapped[str] = mapped_column(String(255), nullable=False)
-    password: Mapped[str] = mapped_column(Text, nullable=False)
-    database_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    database: Mapped[Database] = relationship(back_populates="credentials")

@@ -5,17 +5,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _explain_query(client, database_name: str, collection_name: str, query_type: str, query_filter: dict):
+    """Validate query using explain() to check execution plan."""
+    try:
+        db = client[database_name]
+        collection = db[collection_name]
+
+        if query_type == "find":
+            # Use explain() to validate find query
+            explain_result = collection.find(query_filter).explain()
+            execution_stats = explain_result.get("executionStats", {})
+            execution_stage = execution_stats.get("executionStages", {})
+
+            # Check if full collection scan (inefficient)
+            if execution_stage.get("stage") == "COLLSCAN":
+                logger.warning(f"[EXPLAIN] Full collection scan detected for query: {str(query_filter)[:100]}")
+                return True, "Warning: Full collection scan (may be slow)"
+
+            docs_examined = execution_stats.get("totalDocsExamined", 0)
+            docs_returned = execution_stats.get("nReturned", 0)
+
+            logger.info(f"[EXPLAIN] Find query: examined {docs_examined} docs, returned {docs_returned}")
+            return True, None
+
+        elif query_type == "aggregation":
+            # Use explain() to validate aggregation pipeline
+            explain_result = collection.aggregate(query_filter, explain=True)
+            logger.info(f"[EXPLAIN] Aggregation pipeline validated")
+            return True, None
+
+        return True, None
+
+    except Exception as e:
+        logger.error(f"[EXPLAIN] Query validation failed: {str(e)}")
+        return False, str(e)
+
+
 def validation_agent(state: dict) -> dict:
-    """Validate MongoDB query syntax and structure."""
+    """Validate MongoDB query syntax, structure, and execution plan."""
+    logger.info(f"[VALIDATION] Query: {state.get('query', '')[:100] if state.get('query') else 'None'}, Type: {state.get('query_type')}, Retry: {state.get('retry_count')}")
+
     query = state.get("query")
     query_type = state.get("query_type")
-
-    # Handle administrative queries (like list collections)
-    if query_type == "administrative":
-        state["valid"] = True
-        state["error"] = None
-        state["result"] = state.get("admin_result")
-        return state
+    client = state.get("client")
+    database_name = state.get("database_name")
 
     if not query:
         state["valid"] = False
@@ -24,8 +57,17 @@ def validation_agent(state: dict) -> dict:
 
     state["retry_count"] = state.get("retry_count", 0) + 1
 
+    # Metadata queries and shell syntax skip JSON validation
+    if "listCollections" in query or "stats()" in query or query_type == "shell" or (query and query.startswith("db.")):
+        state["valid"] = True
+        state["error"] = None
+        if query_type is None and query.startswith("db."):
+            state["query_type"] = "shell"
+        logger.info(f"[VALIDATION] Metadata/Shell query accepted: {query[:100]}")
+        return state
+
     try:
-        # Validate JSON structure
+        # Validate JSON structure and syntax
         if query_type == "aggregation":
             # Should be an array of stages
             parsed = json.loads(query)
@@ -88,6 +130,28 @@ def validation_agent(state: dict) -> dict:
                 state["valid"] = False
                 state["error"] = error_msg
                 return state
+
+        # Run explain() to validate execution plan
+        if client and database_name and query_type in ("find", "aggregation"):
+            # Extract collection name from query if available
+            collection_name = state.get("collection_name")
+            if not collection_name and query.startswith("db."):
+                # Try to extract from shell syntax
+                try:
+                    parts = query.split(".")
+                    if len(parts) >= 2:
+                        collection_name = parts[1]
+                except:
+                    pass
+
+            if collection_name:
+                valid, warning = _explain_query(client, database_name, collection_name, query_type, parsed)
+                if not valid:
+                    state["valid"] = False
+                    state["error"] = warning
+                    return state
+                if warning:
+                    logger.warning(f"[VALIDATION] {warning}")
 
         state["valid"] = True
         state["error"] = None

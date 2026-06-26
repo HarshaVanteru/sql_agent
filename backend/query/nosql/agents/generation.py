@@ -1,5 +1,4 @@
 """MongoDB query generation agent."""
-import json
 import logging
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
@@ -39,9 +38,11 @@ def _get_mongodb_schema(client, database_name: str) -> str:
 
 def generation_agent(state: dict) -> dict:
     """Generate MongoDB query from natural language question."""
+    error = state.get('error') or ''
+    logger.info(f"[GENERATION] Retry count: {state.get('retry_count')}, Valid: {state.get('valid')}, Error: {str(error)[:100]}")
+
     client = state.get("client")
     database_name = state.get("database_name")
-    question = state.get("question", "").lower()
 
     if not client:
         state["query"] = None
@@ -54,26 +55,6 @@ def generation_agent(state: dict) -> dict:
         return state
 
     try:
-        # Handle special administrative queries
-        collection_keywords = ["collection", "collections", "table", "tables"]
-        action_keywords = ["list", "show", "get", "provide", "what", "how many"]
-
-        is_collection_query = any(keyword in question for keyword in collection_keywords)
-        is_listing_action = any(keyword in question for keyword in action_keywords)
-
-        if is_collection_query and is_listing_action:
-            db = client[database_name]
-            collections = db.list_collection_names()
-            state["query"] = None
-            state["query_type"] = "administrative"
-            state["admin_result"] = {
-                "columns": ["collection_name"],
-                "rows": [{"collection_name": name} for name in collections],
-                "row_count": len(collections),
-            }
-            logger.info(f"Listed {len(collections)} collections")
-            return state
-
         schema = _get_mongodb_schema(client, database_name)
 
         # Get system prompt from state (stored in database)
@@ -93,36 +74,25 @@ def generation_agent(state: dict) -> dict:
             {"role": "user", "content": state["question"]}
         ]
 
-        logger.info(f"Generating MongoDB query for question: {state['question'][:100]}")
+        logger.info(f"[GENERATION] Generating for question: {state['question'][:100]}")
         response = llm.invoke(messages)
         query_text = response.content.strip()
-        logger.info(f"Generated query: {query_text[:200]}")
+        logger.info(f"[GENERATION] LLM response: {query_text[:300]}")
 
-        # Check if query is unsupported
-        if query_text == "UNSUPPORTED_QUERY":
-            state["query"] = None
-            state["error"] = "Cannot generate a query for this request with the available schema"
-            logger.warning(f"Unsupported query requested: {state['question'][:100]}")
-            return state
+        # Detect query type from the generated query
+        if query_text.startswith("db."):
+            query_type = "shell"
+        elif query_text.startswith("["):
+            query_type = "aggregation"
+        elif query_text.startswith("{"):
+            query_type = "find"
+        else:
+            query_type = None
 
-        # Validate JSON by parsing it
-        try:
-            # Try to parse as JSON (could be filter or pipeline)
-            if query_text.startswith('['):
-                json.loads(query_text)  # Aggregation pipeline
-                state["query"] = query_text
-                state["query_type"] = "aggregation"
-            else:
-                json.loads(query_text)  # Filter object
-                state["query"] = query_text
-                state["query_type"] = "find"
-        except json.JSONDecodeError as e:
-            state["query"] = None
-            state["error"] = f"Generated invalid JSON: {str(e)}"
-            logger.error(f"Invalid MongoDB query generated: {query_text}")
-            return state
-
+        state["query"] = query_text
+        state["query_type"] = query_type
         state["error"] = None
+        logger.info(f"[GENERATION] Detected query type: {query_type}")
 
     except Exception as e:
         state["query"] = None

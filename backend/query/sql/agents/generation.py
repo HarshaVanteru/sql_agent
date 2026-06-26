@@ -2,16 +2,22 @@ import logging
 from langchain_groq import ChatGroq
 from sqlalchemy import text
 from dotenv import load_dotenv
+from backend.query.prompts import get_default_prompt
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
 
-def _get_schema_from_engine(engine):
+def _get_schema_from_engine(engine, database_name: str = None):
     """Fetch database schema from an engine."""
     try:
         with engine.connect() as conn:
+            # Get database name if not provided
+            if not database_name:
+                db_result = conn.execute(text("SELECT DATABASE()"))
+                database_name = db_result.scalar() or "unknown"
+
             cols_result = conn.execute(text("""
                 SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE
                 FROM information_schema.COLUMNS
@@ -38,7 +44,8 @@ def _get_schema_from_engine(engine):
                 for table, col, ref_table, ref_col in fk_result
             ]
 
-            schema_str = "\n".join(
+            schema_str = f"Database: {database_name}\n\n"
+            schema_str += "\n".join(
                 f"Table: {table}\n" + "\n".join(f"  - {c}" for c in cols)
                 for table, cols in sorted(schema.items())
             )
@@ -58,25 +65,25 @@ def generation_agent(state: dict) -> dict:
         return state
 
     try:
-        schema = _get_schema_from_engine(engine)
+        database_name = state.get("database_name")
+        schema = _get_schema_from_engine(engine, database_name)
 
-        prompt = f"""You are a MySQL query generator for an e-commerce analytics system.
+        # Get system prompt from state (stored in database)
+        system_prompt = state.get("system_prompt")
 
-Your job is to convert natural language questions into valid MySQL SELECT queries.
+        # If system_prompt is None (old databases), use default based on db_type
+        if not system_prompt:
+            db_type = state.get("db_type", "mysql")
+            try:
+                system_prompt = get_default_prompt(db_type)
+                logger.warning(f"System prompt was None, using default for {db_type}")
+            except ValueError:
+                state["sql"] = None
+                state["error"] = f"Unknown database type: {db_type}"
+                return state
 
-Rules:
-- Return only the raw SQL query, nothing else. No explanation, no markdown, no backticks.
-- Only generate SELECT statements. Never INSERT, UPDATE, DELETE, or DROP.
-- Always use table aliases for readability when joining tables.
-- Always add a LIMIT 100 unless the user explicitly asks for more or asks for aggregated results.
-- Use exact column and table names from the schema below.
-- If the question is ambiguous, make the most reasonable assumption and generate the query.
-- Always use SELECT DISTINCT when the query involves a JOIN that could produce duplicate rows.
-- Never use SELECT * — select only columns meaningful to the user, excluding raw foreign key IDs unless specifically asked.
-
-Database schema:
-{schema}
-"""
+        # Format the prompt with the schema
+        prompt = system_prompt.format(schema=schema)
 
         messages = [
             {"role": "system", "content": prompt},

@@ -1,7 +1,14 @@
 from sqlalchemy import text
 
 def validation_agent(state: dict) -> dict:
-    sql = state["sql"].strip().lower()
+    sql = state.get("sql")
+
+    if not sql:
+        state["valid"] = False
+        state["error"] = state.get("error", "No SQL query generated")
+        return state
+
+    sql = sql.strip().lower()
     state["retry_count"] = state.get("retry_count", 0) + 1
 
     if not sql.startswith("select"):

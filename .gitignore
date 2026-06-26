@@ -55,3 +55,7 @@ Thumbs.db
 
 # uv/Pip
 uv.lock
+
+# Application logs
+logs/
+*.log
