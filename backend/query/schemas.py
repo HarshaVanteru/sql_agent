@@ -17,7 +17,9 @@ class NaturalLanguageQueryRequest(BaseModel):
 
 
 class NaturalLanguageQueryResponse(BaseModel):
-    sql: str
+    sql: str | None = None
+    query: str | None = None
+    query_type: str | None = None
     columns: list[str]
     rows: list[dict]
     row_count: int
