@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 
 export default function QueryInterface({ selectedDb, onLogout }) {
-  const { token, user, refreshAccessToken } = useAuth()
+  const { token, user, refreshAccessToken, logout } = useAuth()
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -37,8 +37,15 @@ export default function QueryInterface({ selectedDb, onLogout }) {
         // Retry with new token
         return executeQuery(query, localStorage.getItem('auth_token'), mode)
       } else {
+        logout()
         throw new Error('Session expired. Please log in again.')
       }
+    }
+
+    if (response.status === 429) {
+      // Rate limited
+      const errorData = await response.json()
+      throw new Error(errorData.detail?.message || 'Too many requests. Please try again later.')
     }
 
     if (!response.ok) {

@@ -47,7 +47,7 @@ def validation_agent(state: dict) -> dict:
 
     query = state.get("query")
     query_type = state.get("query_type")
-    client = state.get("client")
+    connection = state.get("connection")
     database_name = state.get("database_name")
 
     if not query:
@@ -132,7 +132,7 @@ def validation_agent(state: dict) -> dict:
                 return state
 
         # Run explain() to validate execution plan
-        if client and database_name and query_type in ("find", "aggregation"):
+        if connection and database_name and query_type in ("find", "aggregation"):
             # Extract collection name from query if available
             collection_name = state.get("collection_name")
             if not collection_name and query.startswith("db."):
@@ -145,7 +145,7 @@ def validation_agent(state: dict) -> dict:
                     pass
 
             if collection_name:
-                valid, warning = _explain_query(client, database_name, collection_name, query_type, parsed)
+                valid, warning = _explain_query(connection, database_name, collection_name, query_type, parsed)
                 if not valid:
                     state["valid"] = False
                     state["error"] = warning

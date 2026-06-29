@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Signup() {
   const navigate = useNavigate()
-  const { signup, error, clearError } = useAuth()
+  const { signup, error, clearError, isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/app')
+    }
+  }, [isAuthenticated, navigate])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
@@ -70,7 +76,7 @@ export default function Signup() {
     )
 
     if (result.success) {
-      navigate('/login')
+      navigate('/auth/login')
     }
     setLoading(false)
   }
@@ -180,7 +186,7 @@ export default function Signup() {
 
         <p className="mt-6 text-center text-gray-600">
           Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+          <Link to="/auth/login" className="text-blue-600 hover:text-blue-700 font-medium">
             Sign In
           </Link>
         </p>

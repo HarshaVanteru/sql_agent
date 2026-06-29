@@ -19,24 +19,24 @@ def _convert_objectid_to_str(obj):
 
 def execution_agent(state: dict) -> dict:
     """Execute MongoDB query and fetch results."""
-    client = state.get("client")
+    connection = state.get("connection")
     database_name = state.get("database_name")
     query = state.get("query")
     query_type = state.get("query_type")
 
-    logger.info(f"[EXECUTION] Client: {type(client).__name__ if client else 'None'}, DB: {database_name}, Query: {query[:100] if query else 'None'}, Type: {query_type}")
+    logger.info(f"[EXECUTION] Connection: {type(connection).__name__ if connection else 'None'}, DB: {database_name}, Query: {query[:100] if query else 'None'}, Type: {query_type}")
 
-    if not client or not database_name:
+    if not connection or not database_name:
         state["result"] = None
-        error_msg = f"Missing: client={bool(client)}, database_name={bool(database_name)}"
-        state["error"] = f"Missing MongoDB client or database name - {error_msg}"
+        error_msg = f"Missing: connection={bool(connection)}, database_name={bool(database_name)}"
+        state["error"] = f"Missing MongoDB connection or database name - {error_msg}"
         logger.error(f"[EXECUTION] {state['error']}")
         return state
 
     # Handle metadata queries (listCollections, stats, etc)
     if query and "listCollections" in query:
         try:
-            db = client[database_name]
+            db = connection[database_name]
             collections = db.list_collection_names()
             state["result"] = {
                 "columns": ["collection_name"],
@@ -59,7 +59,7 @@ def execution_agent(state: dict) -> dict:
         return state
 
     try:
-        db = client[database_name]
+        db = connection[database_name]
 
         # Detect query type if not set (for backwards compatibility)
         if not query_type:

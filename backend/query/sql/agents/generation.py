@@ -10,39 +10,50 @@ logger = logging.getLogger(__name__)
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
 
 def _get_schema_from_engine(engine, database_name: str = None):
-    """Fetch database schema from an engine."""
+    """Fetch database schema from an engine (MySQL and PostgreSQL compatible)."""
     try:
         with engine.connect() as conn:
-            # Get database name if not provided
-            if not database_name:
-                db_result = conn.execute(text("SELECT DATABASE()"))
-                database_name = db_result.scalar() or "unknown"
+            dialect = engine.dialect.name
 
-            cols_result = conn.execute(text("""
-                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE
-                FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                ORDER BY TABLE_NAME, ORDINAL_POSITION
-            """))
+            if dialect == "mysql":
+                # MySQL schema query
+                if not database_name:
+                    db_result = conn.execute(text("SELECT DATABASE()"))
+                    database_name = db_result.scalar() or "unknown"
 
-            schema = {}
-            for table, column, col_type, data_type in cols_result:
-                if table not in schema:
-                    schema[table] = []
-                display_type = col_type if data_type == "enum" else data_type
-                schema[table].append(f"{column} ({display_type})")
+                cols_result = conn.execute(text("""
+                    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    ORDER BY TABLE_NAME, ORDINAL_POSITION
+                """))
 
-            fk_result = conn.execute(text("""
-                SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
-                FROM information_schema.KEY_COLUMN_USAGE
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND REFERENCED_TABLE_NAME IS NOT NULL
-            """))
+                schema = {}
+                for table, column, data_type in cols_result:
+                    if table not in schema:
+                        schema[table] = []
+                    schema[table].append(f"{column} ({data_type})")
 
-            fks = [
-                f"  {table}.{col} → {ref_table}.{ref_col}"
-                for table, col, ref_table, ref_col in fk_result
-            ]
+            elif dialect == "postgresql":
+                # PostgreSQL schema query
+                if not database_name:
+                    db_result = conn.execute(text("SELECT current_database()"))
+                    database_name = db_result.scalar() or "unknown"
+
+                cols_result = conn.execute(text("""
+                    SELECT table_name, column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name, ordinal_position
+                """))
+
+                schema = {}
+                for table, column, data_type in cols_result:
+                    if table not in schema:
+                        schema[table] = []
+                    schema[table].append(f"{column} ({data_type})")
+            else:
+                return f"Database type '{dialect}' not fully supported"
 
             schema_str = f"Database: {database_name}\n\n"
             schema_str += "\n".join(
@@ -50,23 +61,21 @@ def _get_schema_from_engine(engine, database_name: str = None):
                 for table, cols in sorted(schema.items())
             )
 
-            if fks:
-                schema_str += "\n\nForeign Keys:\n" + "\n".join(fks)
-
             return schema_str
     except Exception as e:
+        logger.error(f"Error fetching schema: {str(e)}")
         raise
 
 def generation_agent(state: dict) -> dict:
-    engine = state.get("engine")
-    if not engine:
-        state["sql"] = None
-        state["error"] = "Database engine not provided"
+    connection = state.get("connection")
+    if not connection:
+        state["query"] = None
+        state["error"] = "Database connection not provided"
         return state
 
     try:
         database_name = state.get("database_name")
-        schema = _get_schema_from_engine(engine, database_name)
+        schema = _get_schema_from_engine(connection, database_name)
 
         # Get system prompt from state (stored in database)
         system_prompt = state.get("system_prompt")
@@ -78,7 +87,7 @@ def generation_agent(state: dict) -> dict:
                 system_prompt = get_default_prompt(db_type)
                 logger.warning(f"System prompt was None, using default for {db_type}")
             except ValueError:
-                state["sql"] = None
+                state["query"] = None
                 state["error"] = f"Unknown database type: {db_type}"
                 return state
 
@@ -92,10 +101,10 @@ def generation_agent(state: dict) -> dict:
         ]
         logger.info(f"Generating SQL for question: {state['question'][:100]}")
         response = llm.invoke(messages)
-        state["sql"] = response.content.strip()
-        logger.info(f"Generated SQL: {state['sql'][:200]}")
+        state["query"] = response.content.strip()
+        logger.info(f"Generated SQL: {state['query'][:200]}")
     except Exception as e:
-        state["sql"] = None
+        state["query"] = None
         state["error"] = str(e)
         logger.error(f"Generation agent error: {str(e)}", exc_info=True)
 

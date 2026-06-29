@@ -10,11 +10,38 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token')
-    if (storedToken) {
-      setToken(storedToken)
+    const initializeAuth = async () => {
+      const storedToken = localStorage.getItem('auth_token')
+      if (storedToken) {
+        try {
+          // Verify token is still valid
+          const response = await fetch('http://localhost:8000/auth/me', {
+            headers: { Authorization: `Bearer ${storedToken}` }
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            setToken(storedToken)
+            setUser(data.user)
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('auth_token')
+            localStorage.removeItem('refresh_token')
+            setToken(null)
+            setRefreshToken(null)
+          }
+        } catch (err) {
+          // Error checking token, clear it
+          localStorage.removeItem('auth_token')
+          localStorage.removeItem('refresh_token')
+          setToken(null)
+          setRefreshToken(null)
+        }
+      }
+      setLoading(false)
     }
-    setLoading(false)
+
+    initializeAuth()
   }, [])
 
   const signup = async (email, password, firstName, lastName) => {

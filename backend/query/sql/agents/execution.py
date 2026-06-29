@@ -1,15 +1,15 @@
 from sqlalchemy import text
 
 def execution_agent(state: dict) -> dict:
-    engine = state.get("engine")
-    if not engine:
+    connection = state.get("connection")
+    if not connection:
         state["result"] = None
-        state["error"] = "Database engine not provided"
+        state["error"] = "Database connection not provided"
         return state
 
     try:
-        with engine.connect() as conn:
-            result = conn.execute(text(state["sql"]))
+        with connection.connect() as conn:
+            result = conn.execute(text(state["query"]))
             columns = list(result.keys())
             rows = [dict(zip(columns, row)) for row in result.fetchall()]
             state["result"] = {"columns": columns, "rows": rows}

@@ -32,17 +32,18 @@ def create_sql_pipeline():
 
 sql_pipeline = create_sql_pipeline()
 
-def run_sql_pipeline(question: str, history: list, engine=None, system_prompt: str = None, db_type: str = None, database_name: str = None) -> dict:
+def run_sql_pipeline(question: str, history: list, connection=None, system_prompt: str = None, db_type: str = None, database_name: str = None) -> dict:
     state = {
         "question": question,
         "history": history,
-        "sql": None,
+        "query": None,
+        "query_type": "select",
         "valid": False,
         "error": None,
         "result": None,
         "response": None,
         "retry_count": 0,
-        "engine": engine,
+        "connection": connection,
         "system_prompt": system_prompt,
         "db_type": db_type,
         "database_name": database_name,

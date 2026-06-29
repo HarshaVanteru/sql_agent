@@ -130,7 +130,7 @@ async def execute_natural_language_query(
             pipeline_result = run_sql_pipeline(
                 question=body.question,
                 history=[],
-                engine=engine,
+                connection=engine,
                 system_prompt=database.system_prompt,
                 db_type=db_type,
                 database_name=creds.database_name,
@@ -144,7 +144,7 @@ async def execute_natural_language_query(
                     detail={"code": "QUERY_ERROR", "message": pipeline_result.get("error", "Query generation failed")},
                 )
 
-            generated_query = pipeline_result.get("sql")
+            generated_query = pipeline_result.get("query")
             result_data = pipeline_result.get("result", {})
             columns = result_data.get("columns", [])
             rows = result_data.get("rows", [])
@@ -152,7 +152,7 @@ async def execute_natural_language_query(
             logger.info(f"SQL Pipeline executed successfully - returned {len(rows)} rows")
             logger.info(f"Generated SQL: {generated_query[:200] if generated_query else 'None'}")
             return NaturalLanguageQueryResponse(
-                sql=generated_query,
+                query=generated_query,
                 query_type="sql",
                 columns=columns,
                 rows=rows,
@@ -167,7 +167,7 @@ async def execute_natural_language_query(
             logger.info(f"Running NoSQL pipeline for question: {body.question[:100]}...")
             pipeline_result = run_nosql_pipeline(
                 question=body.question,
-                client=client,
+                connection=client,
                 database_name=creds.database_name,
                 history=[],
                 system_prompt=database.system_prompt,

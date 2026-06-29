@@ -12,7 +12,7 @@ export default function MainApp() {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/auth/login')
   }
 
   return (

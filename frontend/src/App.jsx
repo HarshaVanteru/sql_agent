@@ -12,13 +12,19 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/app" element={
-            <ProtectedRoute>
-              <MainApp />
-            </ProtectedRoute>
-          } />
+          <Route path="/auth/signup" element={<Signup />} />
+          <Route path="/auth/login" element={<Login />} />
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute>
+                <MainApp />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/signup" element={<Navigate to="/auth/signup" replace />} />
+          <Route path="/login" element={<Navigate to="/auth/login" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/app" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

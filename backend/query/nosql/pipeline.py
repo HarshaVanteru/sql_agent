@@ -36,7 +36,7 @@ nosql_pipeline = create_nosql_pipeline()
 
 def run_nosql_pipeline(
     question: str,
-    client,
+    connection,
     database_name: str,
     history: list = None,
     system_prompt: str = None,
@@ -46,12 +46,12 @@ def run_nosql_pipeline(
         history = []
 
     logger.info(f"[PIPELINE START] Question: {question[:100]}")
-    logger.info(f"[PIPELINE] Client: {type(client).__name__}, DB: {database_name}")
+    logger.info(f"[PIPELINE] Connection: {type(connection).__name__}, DB: {database_name}")
 
     state = {
         "question": question,
         "history": history,
-        "client": client,
+        "connection": connection,
         "database_name": database_name,
         "query": None,
         "query_type": None,

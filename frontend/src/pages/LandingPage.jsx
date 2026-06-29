@@ -24,13 +24,13 @@ export default function LandingPage() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            to="/signup"
+            to="/auth/signup"
             className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-lg"
           >
             Sign Up
           </Link>
           <Link
-            to="/login"
+            to="/auth/login"
             className="px-8 py-4 bg-white hover:bg-gray-50 text-blue-600 font-semibold border-2 border-blue-600 rounded-lg transition-colors text-lg"
           >
             Sign In

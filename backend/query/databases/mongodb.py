@@ -51,26 +51,66 @@ def execute_mongodb_query(client, database_name: str, query: str) -> dict:
 
     try:
         db = client[database_name]
+        query = query.strip()
 
-        # Parse MongoDB query - expect collection name and query JSON
-        query_parts = query.strip().split('\n', 1)
-        collection_name = query_parts[0].strip()
-        query_filter = {}
+        # Handle listCollections metadata query
+        if "listCollections" in query:
+            collections = db.list_collection_names()
+            logger.info(f"Listed {len(collections)} collections")
+            return {
+                "columns": ["collection_name"],
+                "rows": [{"collection_name": name} for name in collections],
+                "row_count": len(collections),
+            }
 
-        if len(query_parts) > 1:
-            try:
-                query_filter = json.loads(query_parts[1])
-            except json.JSONDecodeError:
-                query_filter = {}
+        # Handle MongoDB shell syntax: db.collection.method(args)
+        if query.startswith("db."):
+            import re
+            match = re.match(r'db\.(\w+)\.(\w+)\((.*)\)', query)
+            if not match:
+                raise ValueError(f"Invalid MongoDB shell syntax: {query}")
 
-        logger.info(f"Executing MongoDB query on collection: {collection_name}")
-        collection = db[collection_name]
-        cursor = collection.find(query_filter)
-        rows = list(cursor)
+            collection_name = match.group(1)
+            method = match.group(2)
+            args_str = match.group(3)
+
+            logger.info(f"Executing MongoDB {method} on collection: {collection_name}")
+            collection = db[collection_name]
+
+            if method == "find":
+                query_filter = json.loads(args_str) if args_str else {}
+                cursor = collection.find(query_filter).limit(100)
+                rows = list(cursor)
+
+            elif method == "countDocuments":
+                query_filter = json.loads(args_str) if args_str else {}
+                count = collection.count_documents(query_filter)
+                rows = [{"count": count}]
+
+            else:
+                raise ValueError(f"Unsupported MongoDB method: {method}")
+
+        else:
+            # Legacy format: collection_name on first line, optional filter JSON on second line
+            query_parts = query.split('\n', 1)
+            collection_name = query_parts[0].strip()
+            query_filter = {}
+
+            if len(query_parts) > 1:
+                try:
+                    query_filter = json.loads(query_parts[1])
+                except json.JSONDecodeError:
+                    query_filter = {}
+
+            logger.info(f"Executing MongoDB find on collection: {collection_name}")
+            collection = db[collection_name]
+            cursor = collection.find(query_filter).limit(100)
+            rows = list(cursor)
 
         # Convert ObjectId to string for JSON serialization
+        from bson import ObjectId
         for row in rows:
-            if '_id' in row:
+            if '_id' in row and isinstance(row['_id'], ObjectId):
                 row['_id'] = str(row['_id'])
 
         columns = list(rows[0].keys()) if rows else []
@@ -87,9 +127,6 @@ def execute_mongodb_query(client, database_name: str, query: str) -> dict:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "QUERY_ERROR", "message": f"Query execution failed: {str(e)}"},
         )
-    finally:
-        if client:
-            client.close()
 
 
 def get_mongodb_schema(client, database_name: str) -> str:

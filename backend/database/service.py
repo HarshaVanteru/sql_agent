@@ -3,17 +3,128 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.models import Database, DatabaseCredential
 from backend.query.prompts import get_default_prompt
+from backend.query.databases.mysql import create_mysql_connection
+from backend.query.databases.postgres import create_postgres_connection
+from backend.query.databases.mongodb import create_mongodb_connection
 from .schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
     DatabaseCredentialInput
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_mysql_error(error: Exception) -> str:
+    """Extract user-friendly error message from MySQL errors."""
+    error_str = str(error).lower()
+
+    if "access denied" in error_str or "1045" in error_str:
+        return "Invalid username or password"
+    elif "unknown database" in error_str or "1049" in error_str:
+        return f"Database does not exist"
+    elif "can't connect" in error_str or "2003" in error_str or "connection refused" in error_str:
+        return f"Cannot connect to MySQL server at {error_str.split('on')[1].split('(')[0].strip() if 'on' in error_str else 'the specified host'}"
+    elif "getaddrinfo failed" in error_str or "11001" in error_str:
+        return "Invalid hostname - cannot resolve address"
+    elif "connection timeout" in error_str:
+        return "Connection timeout - server not responding"
+    else:
+        return f"Connection failed: {str(error).split('(')[0].strip()}"
+
+
+def _parse_postgres_error(error: Exception) -> str:
+    """Extract user-friendly error message from PostgreSQL errors."""
+    error_str = str(error).lower()
+
+    if "password authentication failed" in error_str:
+        return "Invalid username or password"
+    elif "database" in error_str and "does not exist" in error_str:
+        return "Database does not exist"
+    elif "could not translate" in error_str or "unknown host" in error_str:
+        return "Invalid hostname - cannot resolve address"
+    elif "connection refused" in error_str:
+        return f"Cannot connect to PostgreSQL server - connection refused"
+    elif "timeout" in error_str:
+        return "Connection timeout - server not responding"
+    else:
+        return f"Connection failed: {str(error).split('(')[0].strip()}"
+
+
+def _parse_mongodb_error(error: Exception) -> str:
+    """Extract user-friendly error message from MongoDB errors."""
+    error_str = str(error).lower()
+
+    if "authentication failed" in error_str or "auth failed" in error_str:
+        return "Invalid username or password"
+    elif "getaddrinfo failed" in error_str or "unknown host" in error_str:
+        return "Invalid hostname - cannot resolve address"
+    elif "connection refused" in error_str:
+        return "Cannot connect to MongoDB server - connection refused"
+    elif "timeout" in error_str or "timed out" in error_str:
+        return "Connection timeout - server not responding"
+    else:
+        return f"Connection failed: {str(error).split(':')[0].strip()}"
+
+
+async def validate_database_credentials(db_type: str, host: str, port: int, username: str, password: str, database_name: str) -> None:
+    """Validate database credentials by attempting to connect and run a test query.
+
+    Raises HTTPException if credentials are invalid.
+    """
+    db_type_lower = db_type.lower()
+
+    if db_type_lower == "mysql":
+        try:
+            engine = create_mysql_connection(host, port, username, password, database_name)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info(f"MySQL credentials validated for {host}:{port}/{database_name}")
+        except Exception as e:
+            error_msg = _parse_mysql_error(e)
+            logger.warning(f"MySQL validation failed: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+            )
+
+    elif db_type_lower == "postgresql":
+        try:
+            engine = create_postgres_connection(host, port, username, password, database_name)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info(f"PostgreSQL credentials validated for {host}:{port}/{database_name}")
+        except Exception as e:
+            error_msg = _parse_postgres_error(e)
+            logger.warning(f"PostgreSQL validation failed: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+            )
+
+    elif db_type_lower == "mongodb":
+        try:
+            client = create_mongodb_connection(host, port, username, password, database_name)
+            client.close()
+            logger.info(f"MongoDB credentials validated for {host}:{port}/{database_name}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_msg = _parse_mongodb_error(e)
+            logger.warning(f"MongoDB validation failed: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "UNSUPPORTED_DB_TYPE", "message": f"Unsupported database type: {db_type}"},
+        )
 
 
 async def create_database(
@@ -35,6 +146,16 @@ async def create_database(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "DB_EXISTS", "message": f"Database '{body.name}' already exists"},
         )
+
+    # Validate credentials before saving
+    await validate_database_credentials(
+        body.db_type,
+        body.credentials.host,
+        body.credentials.port,
+        body.credentials.username,
+        body.credentials.password,
+        body.credentials.database_name,
+    )
 
     # Generate ID and timestamp
     db_id = str(uuid.uuid4())

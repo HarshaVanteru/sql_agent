@@ -150,10 +150,15 @@ async def refresh_access_token(
     token_svc: TokenService,
 ) -> RefreshTokenResponse:
     """Generate a new access token from a refresh token."""
+    now = datetime.now(timezone.utc)
+
     result = await db.execute(
         select(Session)
         .options(selectinload(Session.user).selectinload(User.profile))
-        .where(Session.is_active == True)
+        .where(
+            Session.is_active == True,
+            Session.expires_at > now,
+        )
         .order_by(Session.created_at.desc())
     )
     sessions = result.scalars().all()
@@ -171,6 +176,7 @@ async def refresh_access_token(
         )
 
     user = valid_session.user
+
     result = await db.execute(select(UserRole).where(UserRole.user_id == user.id))
     role_ids = [ur.role_id for ur in result.scalars().all()]
     roles: list[str] = []

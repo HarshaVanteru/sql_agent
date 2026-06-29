@@ -41,12 +41,12 @@ def generation_agent(state: dict) -> dict:
     error = state.get('error') or ''
     logger.info(f"[GENERATION] Retry count: {state.get('retry_count')}, Valid: {state.get('valid')}, Error: {str(error)[:100]}")
 
-    client = state.get("client")
+    connection = state.get("connection")
     database_name = state.get("database_name")
 
-    if not client:
+    if not connection:
         state["query"] = None
-        state["error"] = "MongoDB client not provided"
+        state["error"] = "MongoDB connection not provided"
         return state
 
     if not database_name:
@@ -55,7 +55,7 @@ def generation_agent(state: dict) -> dict:
         return state
 
     try:
-        schema = _get_mongodb_schema(client, database_name)
+        schema = _get_mongodb_schema(connection, database_name)
 
         # Get system prompt from state (stored in database)
         system_prompt = state.get("system_prompt")

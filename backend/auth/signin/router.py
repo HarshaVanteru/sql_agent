@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated, Union
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .._core import (
@@ -19,6 +19,7 @@ from .._core import (
     get_password_service,
     get_rate_limiter,
     get_token_service,
+    RateLimitExceededError,
 )
 from .schemas import LoginRequest, LoginResponse, MFARequiredResponse, RefreshTokenRequest, RefreshTokenResponse
 from .service import signin, refresh_access_token
@@ -48,8 +49,18 @@ async def login_route(
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_route(
     body: RefreshTokenRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     token_svc: Annotated[TokenService, Depends(get_token_service)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> RefreshTokenResponse:
     """Generate a new access token from a refresh token."""
+    ip = request.client.host if request.client else "unknown"
+    try:
+        await rate_limiter.check("token_refresh", ip)
+    except RateLimitExceededError as e:
+        raise HTTPException(
+            status_code=429,
+            detail={"code": "RATE_LIMIT_EXCEEDED", "message": str(e.message), "retry_after": e.retry_after},
+        )
     return await refresh_access_token(body, db, token_svc)

@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login, error, clearError } = useAuth()
+  const { login, error, clearError, isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/app')
+    }
+  }, [isAuthenticated, navigate])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
@@ -124,7 +130,7 @@ export default function Login() {
 
         <p className="mt-6 text-center text-gray-600">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-medium">
+          <Link to="/auth/signup" className="text-blue-600 hover:text-blue-700 font-medium">
             Sign Up
           </Link>
         </p>

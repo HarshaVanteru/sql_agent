@@ -1,30 +1,30 @@
 from sqlalchemy import text
 
 def validation_agent(state: dict) -> dict:
-    sql = state.get("sql")
+    query = state.get("query")
 
-    if not sql:
+    if not query:
         state["valid"] = False
         state["error"] = state.get("error", "No SQL query generated")
         return state
 
-    sql = sql.strip().lower()
+    query_lower = query.strip().lower()
     state["retry_count"] = state.get("retry_count", 0) + 1
 
-    if not sql.startswith("select"):
+    if not query_lower.startswith("select"):
         state["valid"] = False
         state["error"] = "Only SELECT statements are allowed."
         return state
 
-    engine = state.get("engine")
-    if not engine:
+    connection = state.get("connection")
+    if not connection:
         state["valid"] = False
-        state["error"] = "Database engine not provided"
+        state["error"] = "Database connection not provided"
         return state
 
     try:
-        with engine.connect() as conn:
-            conn.execute(text(f"EXPLAIN {state['sql']}"))
+        with connection.connect() as conn:
+            conn.execute(text(f"EXPLAIN {state['query']}"))
         state["valid"] = True
         state["error"] = None
     except Exception as e:
