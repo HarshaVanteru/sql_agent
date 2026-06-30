@@ -54,7 +54,7 @@ def run_nosql_pipeline(
         "connection": connection,
         "database_name": database_name,
         "query": None,
-        "query_type": None,
+        "query_model": None,
         "valid": False,
         "error": None,
         "result": None,
@@ -65,8 +65,19 @@ def run_nosql_pipeline(
 
     result = nosql_pipeline.invoke(state)
 
-    logger.info(f"[PIPELINE END] Valid: {result.get('valid')}, Query: {result.get('query', '')[:100] if result.get('query') else 'None'}")
+    # Log final pipeline results
+    query_model = result.get('query_model')
+    logger.info(
+        f"[PIPELINE END] Valid: {result.get('valid')}, "
+        f"Operation: {query_model.operation if query_model else 'None'}, "
+        f"Collection: {query_model.collection if query_model else 'None'}"
+    )
+    logger.info(f"[PIPELINE END] Query: {result.get('query', '')[:100] if result.get('query') else 'None'}")
     logger.info(f"[PIPELINE END] Error: {result.get('error')}")
     logger.info(f"[PIPELINE END] Retry Count: {result.get('retry_count')}")
+
+    if result.get('result'):
+        row_count = result.get('result', {}).get('row_count', 0)
+        logger.info(f"[PIPELINE END] Result: {row_count} rows returned")
 
     return result

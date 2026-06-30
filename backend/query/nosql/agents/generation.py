@@ -1,8 +1,10 @@
 """MongoDB query generation agent."""
+import json
 import logging
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 from backend.query.nosql.prompts import get_mongodb_prompt
+from backend.query.nosql.agents.models import parse_query_json
 
 load_dotenv()
 
@@ -36,21 +38,53 @@ def _get_mongodb_schema(client, database_name: str) -> str:
         raise
 
 
+def _extract_json_from_response(response_text: str) -> str:
+    """
+    Extract JSON from LLM response, handling markdown code blocks.
+
+    Args:
+        response_text: Raw LLM response which may contain markdown
+
+    Returns:
+        Extracted JSON string
+
+    Raises:
+        ValueError: If no valid JSON found
+    """
+    text = response_text.strip()
+
+    # Remove markdown code blocks if present
+    if "```json" in text:
+        start = text.find("```json") + 7
+        end = text.find("```", start)
+        text = text[start:end].strip()
+    elif "```" in text:
+        start = text.find("```") + 3
+        end = text.find("```", start)
+        text = text[start:end].strip()
+
+    return text
+
+
 def generation_agent(state: dict) -> dict:
-    """Generate MongoDB query from natural language question."""
-    error = state.get('error') or ''
-    logger.info(f"[GENERATION] Retry count: {state.get('retry_count')}, Valid: {state.get('valid')}, Error: {str(error)[:100]}")
+    """Generate structured MongoDB query from natural language question."""
+    error = state.get("error") or ""
+    logger.info(
+        f"[GENERATION] Retry count: {state.get('retry_count')}, Valid: {state.get('valid')}, Error: {str(error)[:100]}"
+    )
 
     connection = state.get("connection")
     database_name = state.get("database_name")
 
     if not connection:
         state["query"] = None
+        state["query_model"] = None
         state["error"] = "MongoDB connection not provided"
         return state
 
     if not database_name:
         state["query"] = None
+        state["query_model"] = None
         state["error"] = "Database name not provided"
         return state
 
@@ -71,31 +105,46 @@ def generation_agent(state: dict) -> dict:
         messages = [
             {"role": "system", "content": prompt},
             *state["history"],
-            {"role": "user", "content": state["question"]}
+            {"role": "user", "content": state["question"]},
         ]
 
         logger.info(f"[GENERATION] Generating for question: {state['question'][:100]}")
         response = llm.invoke(messages)
-        query_text = response.content.strip()
-        logger.info(f"[GENERATION] LLM response: {query_text[:300]}")
+        response_text = response.content.strip()
+        logger.info(f"[GENERATION] LLM response: {response_text[:300]}")
 
-        # Detect query type from the generated query
-        if query_text.startswith("db."):
-            query_type = "shell"
-        elif query_text.startswith("["):
-            query_type = "aggregation"
-        elif query_text.startswith("{"):
-            query_type = "find"
-        else:
-            query_type = None
+        # Extract JSON from response (handle markdown code blocks)
+        query_json = _extract_json_from_response(response_text)
 
-        state["query"] = query_text
-        state["query_type"] = query_type
+        # Check for unsupported query
+        if "UNSUPPORTED_QUERY" in query_json:
+            state["query"] = None
+            state["query_model"] = None
+            state["error"] = "Query is not supported by the system"
+            logger.info("[GENERATION] Query marked as unsupported by LLM")
+            return state
+
+        # Validate JSON structure and parse into model
+        try:
+            query_model = parse_query_json(query_json)
+            logger.info(
+                f"[GENERATION] Valid {query_model.operation} query for collection '{query_model.collection}'"
+            )
+        except (json.JSONDecodeError, ValueError) as e:
+            state["query"] = None
+            state["query_model"] = None
+            state["error"] = f"Invalid query structure: {str(e)}"
+            logger.warning(f"[GENERATION] Failed to parse query: {str(e)}")
+            return state
+
+        # Store both the JSON string and parsed model for downstream use
+        state["query"] = query_json
+        state["query_model"] = query_model
         state["error"] = None
-        logger.info(f"[GENERATION] Detected query type: {query_type}")
 
     except Exception as e:
         state["query"] = None
+        state["query_model"] = None
         state["error"] = str(e)
         logger.error(f"MongoDB generation agent error: {str(e)}", exc_info=True)
 

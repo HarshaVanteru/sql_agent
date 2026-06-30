@@ -1,166 +1,249 @@
 """MongoDB query validation agent."""
-import json
 import logging
+from typing import Set, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Allowed MongoDB filter operators
+FILTER_OPERATORS: Set[str] = {
+    "$eq",
+    "$gt",
+    "$lt",
+    "$gte",
+    "$lte",
+    "$ne",
+    "$in",
+    "$nin",
+    "$and",
+    "$or",
+    "$not",
+    "$exists",
+    "$type",
+    "$regex",
+    "$text",
+    "$where",
+    "$mod",
+    "$all",
+    "$elemMatch",
+    "$size",
+    "$bitsAllSet",
+    "$bitsAnySet",
+    "$bitsAllClear",
+    "$bitsClear",
+}
 
-def _explain_query(client, database_name: str, collection_name: str, query_type: str, query_filter: dict):
-    """Validate query using explain() to check execution plan."""
+# Allowed MongoDB aggregation pipeline stages
+PIPELINE_STAGES: Set[str] = {
+    "$match",
+    "$group",
+    "$sort",
+    "$limit",
+    "$skip",
+    "$project",
+    "$count",
+    "$lookup",
+    "$unwind",
+    "$bucket",
+    "$bucketAuto",
+    "$facet",
+    "$out",
+    "$merge",
+    "$addFields",
+    "$replaceRoot",
+    "$redact",
+    "$geoNear",
+    "$sample",
+    "$indexStats",
+}
+
+
+def _validate_filter_operators(obj: dict) -> Tuple[bool, str | None]:
+    """
+    Recursively validate all operators in a filter object.
+
+    Args:
+        obj: Filter dictionary to validate
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not isinstance(obj, dict):
+        return True, None
+
+    for key, value in obj.items():
+        if key.startswith("$"):
+            if key not in FILTER_OPERATORS:
+                return False, f"Unknown filter operator: {key}"
+        if isinstance(value, dict):
+            valid, error = _validate_filter_operators(value)
+            if not valid:
+                return False, error
+
+    return True, None
+
+
+def _validate_pipeline_stages(pipeline: list) -> Tuple[bool, str | None]:
+    """
+    Validate all stages in an aggregation pipeline.
+
+    Args:
+        pipeline: List of pipeline stage dictionaries
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not isinstance(pipeline, list):
+        return False, "Pipeline must be a list"
+
+    if not pipeline:
+        return False, "Pipeline cannot be empty"
+
+    for idx, stage in enumerate(pipeline):
+        if not isinstance(stage, dict):
+            return False, f"Stage {idx} must be a dict, got {type(stage).__name__}"
+
+        if not stage:
+            return False, f"Stage {idx} cannot be empty"
+
+        # Check that stage has valid operators
+        stage_keys = set(stage.keys())
+        invalid_keys = stage_keys - PIPELINE_STAGES
+        if invalid_keys:
+            return False, f"Stage {idx} contains unknown operators: {invalid_keys}"
+
+    return True, None
+
+
+def _collection_exists(client, database_name: str, collection_name: str) -> bool:
+    """Check if collection exists in database."""
+    try:
+        db = client[database_name]
+        return collection_name in db.list_collection_names()
+    except Exception as e:
+        logger.warning(f"Could not verify collection existence: {str(e)}")
+        # Don't fail validation if we can't check - connection might be read-only
+        return True
+
+
+def _explain_query(
+    client, database_name: str, collection_name: str, query_model
+) -> Tuple[bool, str | None]:
+    """
+    Validate query execution plan using explain().
+
+    Args:
+        client: MongoDB client
+        database_name: Database name
+        collection_name: Collection name
+        query_model: Validated query model
+
+    Returns:
+        Tuple of (is_valid, warning_message)
+    """
     try:
         db = client[database_name]
         collection = db[collection_name]
 
-        if query_type == "find":
-            # Use explain() to validate find query
-            explain_result = collection.find(query_filter).explain()
+        if query_model.operation == "find":
+            explain_result = collection.find(query_model.filter).explain()
             execution_stats = explain_result.get("executionStats", {})
             execution_stage = execution_stats.get("executionStages", {})
 
-            # Check if full collection scan (inefficient)
             if execution_stage.get("stage") == "COLLSCAN":
-                logger.warning(f"[EXPLAIN] Full collection scan detected for query: {str(query_filter)[:100]}")
-                return True, "Warning: Full collection scan (may be slow)"
+                warning = "Full collection scan detected (may be slow)"
+                logger.warning(f"[VALIDATION] {warning} for query: {query_model.filter}")
+                return True, warning
 
             docs_examined = execution_stats.get("totalDocsExamined", 0)
             docs_returned = execution_stats.get("nReturned", 0)
-
-            logger.info(f"[EXPLAIN] Find query: examined {docs_examined} docs, returned {docs_returned}")
+            logger.info(
+                f"[VALIDATION] Find query: examined {docs_examined} docs, returned {docs_returned}"
+            )
             return True, None
 
-        elif query_type == "aggregation":
-            # Use explain() to validate aggregation pipeline
-            explain_result = collection.aggregate(query_filter, explain=True)
-            logger.info(f"[EXPLAIN] Aggregation pipeline validated")
+        elif query_model.operation == "aggregate":
+            # Validate aggregation pipeline with explain
+            collection.aggregate(query_model.pipeline, explain=True)
+            logger.info("[VALIDATION] Aggregation pipeline validated")
             return True, None
 
         return True, None
 
     except Exception as e:
-        logger.error(f"[EXPLAIN] Query validation failed: {str(e)}")
+        logger.error(f"[VALIDATION] Execution plan check failed: {str(e)}")
         return False, str(e)
 
 
 def validation_agent(state: dict) -> dict:
-    """Validate MongoDB query syntax, structure, and execution plan."""
-    logger.info(f"[VALIDATION] Query: {state.get('query', '')[:100] if state.get('query') else 'None'}, Type: {state.get('query_type')}, Retry: {state.get('retry_count')}")
-
-    query = state.get("query")
-    query_type = state.get("query_type")
+    """Validate structured MongoDB query models."""
+    query_model = state.get("query_model")
     connection = state.get("connection")
     database_name = state.get("database_name")
 
-    if not query:
-        state["valid"] = False
-        state["error"] = state.get("error", "No MongoDB query generated")
-        return state
-
+    # Increment retry count FIRST, before any early returns
     state["retry_count"] = state.get("retry_count", 0) + 1
 
-    # Metadata queries and shell syntax skip JSON validation
-    if "listCollections" in query or "stats()" in query or query_type == "shell" or (query and query.startswith("db.")):
-        state["valid"] = True
-        state["error"] = None
-        if query_type is None and query.startswith("db."):
-            state["query_type"] = "shell"
-        logger.info(f"[VALIDATION] Metadata/Shell query accepted: {query[:100]}")
+    logger.info(
+        f"[VALIDATION] Model type: {query_model.__class__.__name__ if query_model else 'None'}, "
+        f"Retry: {state.get('retry_count')}"
+    )
+
+    if not query_model:
+        state["valid"] = False
+        state["error"] = state.get("error", "No valid query model generated")
         return state
 
     try:
-        # Validate JSON structure and syntax
-        if query_type == "aggregation":
-            # Should be an array of stages
-            parsed = json.loads(query)
-            if not isinstance(parsed, list):
+        # Validate collection exists
+        if connection and database_name:
+            if not _collection_exists(connection, database_name, query_model.collection):
                 state["valid"] = False
-                state["error"] = "Aggregation pipeline must be a JSON array"
+                state["error"] = f"Collection '{query_model.collection}' not found"
+                logger.warning(f"[VALIDATION] {state['error']}")
                 return state
 
-            # Validate each stage
-            allowed_stages = {
-                "$match", "$group", "$sort", "$limit", "$skip", "$project",
-                "$count", "$lookup", "$unwind", "$bucket", "$bucketAuto",
-                "$facet", "$out", "$merge", "$addFields", "$replaceRoot",
-                "$redact", "$geoNear", "$sample", "$indexStats"
-            }
-
-            for stage in parsed:
-                if not isinstance(stage, dict):
-                    state["valid"] = False
-                    state["error"] = f"Each pipeline stage must be an object"
-                    return state
-
-                stage_keys = set(stage.keys())
-                invalid_stages = stage_keys - allowed_stages
-                if invalid_stages:
-                    state["valid"] = False
-                    state["error"] = f"Unknown pipeline stages: {invalid_stages}"
-                    return state
-
-        elif query_type == "find":
-            # Should be a valid filter object
-            parsed = json.loads(query)
-            if not isinstance(parsed, dict):
-                state["valid"] = False
-                state["error"] = "Find filter must be a JSON object"
-                return state
-
-            # Validate operators
-            valid_operators = {
-                "$eq", "$gt", "$lt", "$gte", "$lte", "$ne", "$in", "$nin",
-                "$and", "$or", "$not", "$exists", "$type", "$regex", "$text",
-                "$where", "$mod", "$all", "$elemMatch", "$size", "$bitsAllSet",
-                "$bitsAnySet", "$bitsAllClear", "$bitsClear"
-            }
-
-            def validate_operators(obj):
-                if isinstance(obj, dict):
-                    for key, value in obj.items():
-                        if key.startswith("$"):
-                            if key not in valid_operators:
-                                return False, f"Unknown operator: {key}"
-                        if isinstance(value, dict):
-                            valid, msg = validate_operators(value)
-                            if not valid:
-                                return False, msg
-                return True, None
-
-            valid, error_msg = validate_operators(parsed)
+        # Operation-specific validation
+        if query_model.operation in ("find", "findOne", "countDocuments"):
+            # Validate filter operators
+            valid, error = _validate_filter_operators(query_model.filter)
             if not valid:
                 state["valid"] = False
-                state["error"] = error_msg
+                state["error"] = error
+                logger.error(f"[VALIDATION] {error}")
                 return state
 
-        # Run explain() to validate execution plan
-        if connection and database_name and query_type in ("find", "aggregation"):
-            # Extract collection name from query if available
-            collection_name = state.get("collection_name")
-            if not collection_name and query.startswith("db."):
-                # Try to extract from shell syntax
-                try:
-                    parts = query.split(".")
-                    if len(parts) >= 2:
-                        collection_name = parts[1]
-                except:
-                    pass
+        elif query_model.operation == "aggregate":
+            # Validate pipeline stages
+            valid, error = _validate_pipeline_stages(query_model.pipeline)
+            if not valid:
+                state["valid"] = False
+                state["error"] = error
+                logger.error(f"[VALIDATION] {error}")
+                return state
 
-            if collection_name:
-                valid, warning = _explain_query(connection, database_name, collection_name, query_type, parsed)
-                if not valid:
-                    state["valid"] = False
-                    state["error"] = warning
-                    return state
-                if warning:
-                    logger.warning(f"[VALIDATION] {warning}")
+        elif query_model.operation == "distinct":
+            # Validate filter operators
+            valid, error = _validate_filter_operators(query_model.filter)
+            if not valid:
+                state["valid"] = False
+                state["error"] = error
+                return state
+
+        # Optional: Run explain() to catch execution issues
+        if connection and database_name:
+            valid, warning = _explain_query(
+                connection, database_name, query_model.collection, query_model
+            )
+            if not valid:
+                state["valid"] = False
+                state["error"] = warning
+                return state
+            if warning:
+                logger.warning(f"[VALIDATION] {warning}")
 
         state["valid"] = True
         state["error"] = None
-        logger.info(f"MongoDB {query_type} query validated successfully")
-
-    except json.JSONDecodeError as e:
-        state["valid"] = False
-        state["error"] = f"Invalid JSON: {str(e)}"
-        logger.error(f"JSON validation error: {str(e)}")
+        logger.info(f"[VALIDATION] {query_model.operation} query validated successfully")
 
     except Exception as e:
         state["valid"] = False

@@ -1,13 +1,13 @@
 """MongoDB query execution agent."""
-import json
 import logging
 from bson import ObjectId
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def _convert_objectid_to_str(obj):
-    """Recursively convert ObjectId to string for JSON serialization."""
+def _convert_objectid_to_str(obj: Any) -> Any:
+    """Recursively convert ObjectId and other BSON types to JSON-serializable types."""
     if isinstance(obj, ObjectId):
         return str(obj)
     elif isinstance(obj, dict):
@@ -17,14 +17,76 @@ def _convert_objectid_to_str(obj):
     return obj
 
 
+def _execute_find(collection, query_model) -> list:
+    """Execute find query and return results."""
+    cursor = collection.find(query_model.filter)
+
+    if query_model.projection:
+        cursor = cursor.project(query_model.projection)
+
+    if query_model.sort:
+        cursor = cursor.sort([(k, v) for k, v in query_model.sort.items()])
+
+    if query_model.skip:
+        cursor = cursor.skip(query_model.skip)
+
+    if query_model.limit:
+        cursor = cursor.limit(query_model.limit)
+    else:
+        cursor = cursor.limit(100)
+
+    return list(cursor)
+
+
+def _execute_find_one(collection, query_model) -> list:
+    """Execute findOne query and return single result."""
+    cursor = collection.find(query_model.filter)
+
+    if query_model.projection:
+        cursor = cursor.project(query_model.projection)
+
+    if query_model.sort:
+        cursor = cursor.sort([(k, v) for k, v in query_model.sort.items()])
+
+    result = cursor.limit(1)
+    rows = list(result)
+    return rows
+
+
+def _execute_aggregate(collection, query_model) -> list:
+    """Execute aggregation pipeline and return results."""
+    cursor = collection.aggregate(query_model.pipeline)
+    return list(cursor)
+
+
+def _execute_count_documents(collection, query_model) -> list:
+    """Execute countDocuments and return count."""
+    count = collection.count_documents(query_model.filter)
+    return [{"count": count}]
+
+
+def _execute_estimated_document_count(collection, query_model) -> list:
+    """Execute estimatedDocumentCount and return count."""
+    count = collection.estimated_document_count()
+    return [{"count": count}]
+
+
+def _execute_distinct(collection, query_model) -> list:
+    """Execute distinct and return unique values."""
+    distinct_values = collection.distinct(query_model.field, query_model.filter)
+    return [{"value": val} for val in distinct_values]
+
+
 def execution_agent(state: dict) -> dict:
-    """Execute MongoDB query and fetch results."""
+    """Execute structured MongoDB query using PyMongo."""
+    query_model = state.get("query_model")
     connection = state.get("connection")
     database_name = state.get("database_name")
-    query = state.get("query")
-    query_type = state.get("query_type")
 
-    logger.info(f"[EXECUTION] Connection: {type(connection).__name__ if connection else 'None'}, DB: {database_name}, Query: {query[:100] if query else 'None'}, Type: {query_type}")
+    logger.info(
+        f"[EXECUTION] Model type: {query_model.__class__.__name__ if query_model else 'None'}, "
+        f"DB: {database_name}"
+    )
 
     if not connection or not database_name:
         state["result"] = None
@@ -33,136 +95,62 @@ def execution_agent(state: dict) -> dict:
         logger.error(f"[EXECUTION] {state['error']}")
         return state
 
-    # Handle metadata queries (listCollections, stats, etc)
-    if query and "listCollections" in query:
-        try:
-            db = connection[database_name]
-            collections = db.list_collection_names()
-            state["result"] = {
-                "columns": ["collection_name"],
-                "rows": [{"collection_name": name} for name in collections],
-                "row_count": len(collections),
-            }
-            state["error"] = None
-            logger.info(f"[EXECUTION] Listed {len(collections)} collections")
-            return state
-        except Exception as e:
-            state["result"] = None
-            state["error"] = str(e)
-            logger.error(f"[EXECUTION] Metadata query error: {str(e)}", exc_info=True)
-            return state
-
-    if not query:
+    if not query_model:
         state["result"] = None
-        state["error"] = "No MongoDB query generated"
+        state["error"] = "No valid query model to execute"
         logger.error(f"[EXECUTION] {state['error']}")
         return state
 
     try:
         db = connection[database_name]
+        collection = db[query_model.collection]
 
-        # Detect query type if not set (for backwards compatibility)
-        if not query_type:
-            if query.startswith("db."):
-                query_type = "shell"
-            elif query.startswith("["):
-                query_type = "aggregation"
-            elif query.startswith("{"):
-                query_type = "find"
+        # Execute query based on operation type
+        if query_model.operation == "find":
+            logger.info(
+                f"[EXECUTION] Executing find on '{query_model.collection}': {str(query_model.filter)[:200]}"
+            )
+            rows = _execute_find(collection, query_model)
 
-        # Try to infer collection name from query
-        # For queries like "db.users.find(...)" extract "users"
-        collection_name = None
-        if query and "db." in query:
-            # Extract collection name from db.collection.method() syntax
-            try:
-                parts = query.split(".")
-                if len(parts) >= 2 and parts[0] == "db":
-                    collection_name = parts[1]
-            except:
-                pass
+        elif query_model.operation == "findOne":
+            logger.info(
+                f"[EXECUTION] Executing findOne on '{query_model.collection}': {str(query_model.filter)[:200]}"
+            )
+            rows = _execute_find_one(collection, query_model)
 
-        if not collection_name:
-            state["result"] = None
-            state["error"] = "Cannot determine collection name from query"
-            logger.error(f"[EXECUTION] {state['error']}")
-            return state
+        elif query_model.operation == "aggregate":
+            logger.info(
+                f"[EXECUTION] Executing aggregate on '{query_model.collection}': {len(query_model.pipeline)} stages"
+            )
+            rows = _execute_aggregate(collection, query_model)
 
-        collection = db[collection_name]
+        elif query_model.operation == "countDocuments":
+            logger.info(f"[EXECUTION] Executing countDocuments on '{query_model.collection}'")
+            rows = _execute_count_documents(collection, query_model)
 
-        if query_type == "shell":
-            # Parse MongoDB shell syntax like db.users.find({...})
-            try:
-                # Extract method and arguments from shell syntax
-                # Pattern: db.collection.method(arg1, arg2, ...)
-                import re
-                match = re.match(r'db\.(\w+)\.(\w+)\((.*)\)', query)
-                if not match:
-                    state["result"] = None
-                    state["error"] = f"Invalid MongoDB shell syntax: {query[:100]}"
-                    logger.error(f"[EXECUTION] {state['error']}")
-                    return state
+        elif query_model.operation == "estimatedDocumentCount":
+            logger.info(f"[EXECUTION] Executing estimatedDocumentCount on '{query_model.collection}'")
+            rows = _execute_estimated_document_count(collection, query_model)
 
-                method = match.group(2)
-                args_str = match.group(3)
-
-                if method == "find":
-                    parsed_query = json.loads(args_str) if args_str else {}
-                    logger.info(f"Executing MongoDB find on collection '{collection_name}': {str(parsed_query)[:200]}")
-                    cursor = collection.find(parsed_query).limit(100)
-                    rows = list(cursor)
-
-                elif method == "countDocuments":
-                    parsed_query = json.loads(args_str) if args_str else {}
-                    logger.info(f"Executing countDocuments on collection '{collection_name}'")
-                    count = collection.count_documents(parsed_query)
-                    rows = [{"count": count}]
-
-                elif method == "listCollections":
-                    # Already handled in metadata queries section
-                    state["result"] = None
-                    state["error"] = "listCollections should be handled as metadata query"
-                    return state
-
-                else:
-                    state["result"] = None
-                    state["error"] = f"Unsupported MongoDB method: {method}"
-                    return state
-
-            except json.JSONDecodeError as e:
-                state["result"] = None
-                state["error"] = f"Invalid JSON in query: {str(e)}"
-                logger.error(f"[EXECUTION] {state['error']}")
-                return state
-
-        elif query_type == "find":
-            # Execute find query (legacy JSON filter format)
-            parsed_query = json.loads(query)
-            logger.info(f"Executing MongoDB find on collection '{collection_name}': {str(parsed_query)[:200]}")
-
-            cursor = collection.find(parsed_query).limit(100)
-            rows = list(cursor)
-
-        elif query_type == "aggregation":
-            # Execute aggregation pipeline
-            parsed_query = json.loads(query)
-            logger.info(f"Executing MongoDB aggregation on collection '{collection_name}': {str(parsed_query)[:200]}")
-
-            cursor = collection.aggregate(parsed_query)
-            rows = list(cursor)
+        elif query_model.operation == "distinct":
+            logger.info(
+                f"[EXECUTION] Executing distinct on '{query_model.collection}', field: '{query_model.field}'"
+            )
+            rows = _execute_distinct(collection, query_model)
 
         else:
             state["result"] = None
-            state["error"] = f"Unknown query type: {query_type}"
+            state["error"] = f"Unsupported operation: {query_model.operation}"
+            logger.error(f"[EXECUTION] {state['error']}")
             return state
 
-        # Convert ObjectId and other non-JSON types
+        # Convert BSON types to JSON-serializable format
         rows = [_convert_objectid_to_str(row) for row in rows]
 
-        # Get column names from first row
+        # Extract column names from first row
         columns = list(rows[0].keys()) if rows else []
 
-        logger.info(f"MongoDB query executed successfully - returned {len(rows)} rows")
+        logger.info(f"[EXECUTION] Query executed successfully - returned {len(rows)} rows")
         state["result"] = {
             "columns": columns,
             "rows": rows,
@@ -173,6 +161,6 @@ def execution_agent(state: dict) -> dict:
     except Exception as e:
         state["result"] = None
         state["error"] = str(e)
-        logger.error(f"MongoDB execution error: {str(e)}", exc_info=True)
+        logger.error(f"[EXECUTION] MongoDB execution error: {str(e)}", exc_info=True)
 
     return state
