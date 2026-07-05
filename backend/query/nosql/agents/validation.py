@@ -125,55 +125,6 @@ def _collection_exists(client, database_name: str, collection_name: str) -> bool
         return True
 
 
-def _explain_query(
-    client, database_name: str, collection_name: str, query_model
-) -> Tuple[bool, str | None]:
-    """
-    Validate query execution plan using explain().
-
-    Args:
-        client: MongoDB client
-        database_name: Database name
-        collection_name: Collection name
-        query_model: Validated query model
-
-    Returns:
-        Tuple of (is_valid, warning_message)
-    """
-    try:
-        db = client[database_name]
-        collection = db[collection_name]
-
-        if query_model.operation == "find":
-            explain_result = collection.find(query_model.filter).explain()
-            execution_stats = explain_result.get("executionStats", {})
-            execution_stage = execution_stats.get("executionStages", {})
-
-            if execution_stage.get("stage") == "COLLSCAN":
-                warning = "Full collection scan detected (may be slow)"
-                logger.warning(f"[VALIDATION] {warning} for query: {query_model.filter}")
-                return True, warning
-
-            docs_examined = execution_stats.get("totalDocsExamined", 0)
-            docs_returned = execution_stats.get("nReturned", 0)
-            logger.info(
-                f"[VALIDATION] Find query: examined {docs_examined} docs, returned {docs_returned}"
-            )
-            return True, None
-
-        elif query_model.operation == "aggregate":
-            # Validate aggregation pipeline with explain
-            collection.aggregate(query_model.pipeline, explain=True)
-            logger.info("[VALIDATION] Aggregation pipeline validated")
-            return True, None
-
-        return True, None
-
-    except Exception as e:
-        logger.error(f"[VALIDATION] Execution plan check failed: {str(e)}")
-        return False, str(e)
-
-
 def validation_agent(state: dict) -> dict:
     """Validate structured MongoDB query models."""
     query_model = state.get("query_model")
@@ -228,18 +179,6 @@ def validation_agent(state: dict) -> dict:
                 state["valid"] = False
                 state["error"] = error
                 return state
-
-        # Optional: Run explain() to catch execution issues
-        if connection and database_name:
-            valid, warning = _explain_query(
-                connection, database_name, query_model.collection, query_model
-            )
-            if not valid:
-                state["valid"] = False
-                state["error"] = warning
-                return state
-            if warning:
-                logger.warning(f"[VALIDATION] {warning}")
 
         state["valid"] = True
         state["error"] = None

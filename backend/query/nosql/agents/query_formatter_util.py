@@ -1,5 +1,4 @@
 """Utility to format MongoDB queries into shell syntax for UI display."""
-import json
 from typing import Any, Dict, List
 
 

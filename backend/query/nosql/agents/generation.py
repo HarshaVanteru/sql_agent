@@ -2,11 +2,9 @@
 import json
 import logging
 from langchain_groq import ChatGroq
-from dotenv import load_dotenv
 from backend.query.nosql.prompts import get_mongodb_prompt
 from backend.query.nosql.agents.models import parse_query_json
-
-load_dotenv()
+from backend.query.nosql.agents.query_formatter_util import query_model_to_mongodb_shell
 
 logger = logging.getLogger(__name__)
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
@@ -39,18 +37,7 @@ def _get_mongodb_schema(client, database_name: str) -> str:
 
 
 def _extract_json_from_response(response_text: str) -> str:
-    """
-    Extract JSON from LLM response, handling markdown code blocks.
-
-    Args:
-        response_text: Raw LLM response which may contain markdown
-
-    Returns:
-        Extracted JSON string
-
-    Raises:
-        ValueError: If no valid JSON found
-    """
+    """Extract JSON from LLM response, handling markdown code blocks."""
     text = response_text.strip()
 
     # Remove markdown code blocks if present
@@ -66,6 +53,14 @@ def _extract_json_from_response(response_text: str) -> str:
     return text
 
 
+def _set_error_state(state: dict, error: str) -> None:
+    """Set error state with None values for query fields."""
+    state["query"] = None
+    state["query_json"] = None
+    state["query_model"] = None
+    state["error"] = error
+
+
 def generation_agent(state: dict) -> dict:
     """Generate structured MongoDB query from natural language question."""
     error = state.get("error") or ""
@@ -77,15 +72,11 @@ def generation_agent(state: dict) -> dict:
     database_name = state.get("database_name")
 
     if not connection:
-        state["query"] = None
-        state["query_model"] = None
-        state["error"] = "MongoDB connection not provided"
+        _set_error_state(state, "MongoDB connection not provided")
         return state
 
     if not database_name:
-        state["query"] = None
-        state["query_model"] = None
-        state["error"] = "Database name not provided"
+        _set_error_state(state, "Database name not provided")
         return state
 
     try:
@@ -118,9 +109,7 @@ def generation_agent(state: dict) -> dict:
 
         # Check for unsupported query
         if "UNSUPPORTED_QUERY" in query_json:
-            state["query"] = None
-            state["query_model"] = None
-            state["error"] = "Query is not supported by the system"
+            _set_error_state(state, "Query is not supported by the system")
             logger.info("[GENERATION] Query marked as unsupported by LLM")
             return state
 
@@ -131,21 +120,21 @@ def generation_agent(state: dict) -> dict:
                 f"[GENERATION] Valid {query_model.operation} query for collection '{query_model.collection}'"
             )
         except (json.JSONDecodeError, ValueError) as e:
-            state["query"] = None
-            state["query_model"] = None
-            state["error"] = f"Invalid query structure: {str(e)}"
+            _set_error_state(state, f"Invalid query structure: {str(e)}")
             logger.warning(f"[GENERATION] Failed to parse query: {str(e)}")
             return state
 
-        # Store both the JSON string and parsed model for downstream use
-        state["query"] = query_json
+        # Convert model to MongoDB shell query for user display
+        shell_query = query_model_to_mongodb_shell(query_model)
+
+        # Store shell query for UI, raw JSON for formatting, model for validation/execution
+        state["query"] = shell_query
+        state["query_json"] = query_json
         state["query_model"] = query_model
         state["error"] = None
 
     except Exception as e:
-        state["query"] = None
-        state["query_model"] = None
-        state["error"] = str(e)
+        _set_error_state(state, str(e))
         logger.error(f"MongoDB generation agent error: {str(e)}", exc_info=True)
 
     return state
