@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.database.crypto import decrypt
 from backend.database.models import Database
 from backend.query.agent.loop import run_agent
 from backend.query.models import Conversation, Message
@@ -43,6 +44,18 @@ async def _load_conversation(
             detail={"code": "NOT_FOUND", "message": "Conversation not found"},
         )
     return conversation
+
+
+def _credential_password(creds) -> str:
+    """Decrypt a stored connection password, or fail cleanly."""
+    try:
+        return decrypt(creds.password)
+    except ValueError as e:
+        logger.error(f"Could not decrypt credentials for database {creds.database_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "CREDENTIALS_ERROR", "message": "Stored credentials could not be read"},
+        )
 
 
 def _to_agent_history(messages: list[Message]) -> list:
@@ -85,12 +98,14 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
 
     db_type = database.db_type.lower()
 
+    password = _credential_password(creds)
+
     if db_type == "mysql":
-        engine = create_mysql_connection(creds.host, creds.port, creds.username, creds.password, creds.database_name)
+        engine = create_mysql_connection(creds.host, creds.port, creds.username, password, creds.database_name)
         result_data = await run_in_threadpool(execute_mysql_query, engine, body.query)
 
     elif db_type == "postgresql":
-        engine = create_postgres_connection(creds.host, creds.port, creds.username, creds.password, creds.database_name)
+        engine = create_postgres_connection(creds.host, creds.port, creds.username, password, creds.database_name)
         result_data = await run_in_threadpool(execute_postgres_query, engine, body.query)
 
     else:
@@ -137,10 +152,12 @@ async def execute_natural_language_query(
 
     db_type = database.db_type.lower()
 
+    password = _credential_password(creds)
+
     if db_type == "mysql":
-        engine = create_mysql_connection(creds.host, creds.port, creds.username, creds.password, creds.database_name)
+        engine = create_mysql_connection(creds.host, creds.port, creds.username, password, creds.database_name)
     elif db_type == "postgresql":
-        engine = create_postgres_connection(creds.host, creds.port, creds.username, creds.password, creds.database_name)
+        engine = create_postgres_connection(creds.host, creds.port, creds.username, password, creds.database_name)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

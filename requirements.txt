@@ -17,6 +17,7 @@ asyncpg           # only needed if the app database itself is PostgreSQL
 # Auth
 python-jose       # JWT encode/decode
 bcrypt            # password hashing
+cryptography      # Fernet, for encrypting stored connection passwords
 
 # Config and validation
 pydantic

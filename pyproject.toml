@@ -21,6 +21,7 @@ dependencies = [
     # Auth
     "python-jose>=3.5.0",
     "bcrypt>=5.0.0",
+    "cryptography>=44.0.0",  # Fernet, for encrypting stored connection passwords
     # Config and validation
     "pydantic>=2.13.4",
     "email-validator>=2.2.0",  # required by pydantic's EmailStr

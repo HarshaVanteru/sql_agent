@@ -4,14 +4,16 @@ import logging
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.database.crypto import encrypt
 from backend.database.models import Database, DatabaseCredential
 from backend.query.databases.mysql import create_mysql_connection
 from backend.query.databases.postgres import create_postgres_connection
 from .schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
-    DatabaseCredentialInput
+    DatabaseCredentialOut
 )
 
 logger = logging.getLogger(__name__)
@@ -141,13 +143,14 @@ async def create_database(
     db.add(database)
     await db.flush()
 
-    # Create credentials
+    # Create credentials. The password is encrypted at rest; everything else is
+    # not secret and stays queryable.
     credentials = DatabaseCredential(
         database_id=db_id,
         host=body.credentials.host,
         port=body.credentials.port,
         username=body.credentials.username,
-        password=body.credentials.password,
+        password=encrypt(body.credentials.password),
         database_name=body.credentials.database_name,
     )
     db.add(credentials)
@@ -183,14 +186,16 @@ async def get_databases(user_id: str, db: AsyncSession) -> list[DatabaseResponse
 
 
 async def get_database_detail(user_id: str, database_id: str, db: AsyncSession) -> DatabaseDetailResponse:
-    """Get database with credentials."""
+    """Get database with credentials, minus the password."""
     result = await db.execute(
-        select(Database).where(
+        select(Database)
+        .options(selectinload(Database.credentials))
+        .where(
             Database.id == database_id,
             Database.user_id == user_id,
         )
     )
-    database = result.scalar_one_or_none()
+    database = result.unique().scalar_one_or_none()
     if not database:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -209,11 +214,10 @@ async def get_database_detail(user_id: str, database_id: str, db: AsyncSession) 
         name=database.name,
         db_type=database.db_type,
         created_at=database.created_at.isoformat() if database.created_at else "",
-        credentials=DatabaseCredentialInput(
+        credentials=DatabaseCredentialOut(
             host=creds.host,
             port=creds.port,
             username=creds.username,
-            password=creds.password,
             database_name=creds.database_name,
         ),
     )

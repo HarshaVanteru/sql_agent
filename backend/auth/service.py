@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -28,6 +29,10 @@ from backend.auth.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Consecutive failures before an account is locked, and for how long.
+LOGIN_MAX_ATTEMPTS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_LOCKOUT_MINUTES = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -87,8 +92,29 @@ async def login(body: LoginRequest, db: AsyncSession) -> LoginResponse:
         verify_password(body.password, "$2b$12$" + "." * 53)
         raise _invalid_credentials()
 
+    now = datetime.now(timezone.utc)
+
+    if user.locked_until and _as_utc(user.locked_until) > now:
+        remaining = int((_as_utc(user.locked_until) - now).total_seconds())
+        logger.warning(f"Login attempt on locked account {user.id}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "ACCOUNT_LOCKED",
+                "message": f"Too many failed attempts. Try again in {remaining // 60 + 1} minute(s).",
+                "retry_after": remaining,
+            },
+        )
+
     if not verify_password(body.password, user.password_hash):
-        logger.info(f"Failed login for user {user.id}")
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= LOGIN_MAX_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+            user.failed_login_attempts = 0
+            logger.warning(f"Account {user.id} locked for {LOGIN_LOCKOUT_MINUTES}m after repeated failures")
+        else:
+            logger.info(f"Failed login for user {user.id} ({user.failed_login_attempts}/{LOGIN_MAX_ATTEMPTS})")
+        await db.commit()
         raise _invalid_credentials()
 
     if not user.is_active:
@@ -96,6 +122,10 @@ async def login(body: LoginRequest, db: AsyncSession) -> LoginResponse:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "ACCOUNT_DISABLED", "message": "This account is disabled"},
         )
+
+    # A good password clears the record.
+    user.failed_login_attempts = 0
+    user.locked_until = None
 
     raw_refresh, refresh_hash = generate_refresh_token()
     db.add(Session(

@@ -10,6 +10,18 @@ class DatabaseCredentialInput(BaseModel):
     database_name: str = Field(..., min_length=1)
 
 
+class DatabaseCredentialOut(BaseModel):
+    """Credentials as returned to the client.
+
+    The password is deliberately absent: it is encrypted at rest and there is no
+    reason to hand it back out.
+    """
+    host: str
+    port: int
+    username: str
+    database_name: str
+
+
 class DatabaseCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     db_type: str = Field(..., min_length=1, max_length=50)
@@ -27,7 +39,7 @@ class DatabaseResponse(BaseModel):
 
 
 class DatabaseDetailResponse(DatabaseResponse):
-    credentials: DatabaseCredentialInput
+    credentials: DatabaseCredentialOut
 
     class Config:
         from_attributes = True
