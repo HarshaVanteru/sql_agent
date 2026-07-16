@@ -1,1 +1,0 @@
-"""NoSQL query processing (MongoDB)."""

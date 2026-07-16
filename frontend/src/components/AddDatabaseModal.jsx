@@ -103,7 +103,6 @@ export default function AddDatabaseModal({ onClose, onAdded }) {
             >
               <option value="mysql">MySQL</option>
               <option value="postgresql">PostgreSQL</option>
-              <option value="mongodb">MongoDB</option>
             </select>
           </div>
 

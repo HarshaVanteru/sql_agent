@@ -1,7 +1,7 @@
 """Logging configuration for the application."""
 import logging
 import logging.handlers
-import os
+import sys
 from pathlib import Path
 
 # Create logs directory if it doesn't exist
@@ -21,17 +21,25 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Console handler (INFO level)
-    console_handler = logging.StreamHandler()
+    # Console handler (INFO level).
+    # A Windows console is cp1252, and model output routinely contains characters
+    # it cannot encode (narrow no-break spaces, em dashes). Without this, logging
+    # such a line raises UnicodeEncodeError instead of printing it.
+    stream = sys.stderr
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(errors="backslashreplace")
+    console_handler = logging.StreamHandler(stream)
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter(LOG_FORMAT)
     console_handler.setFormatter(console_formatter)
 
-    # File handler (DEBUG level - more detailed)
+    # File handler (DEBUG level - more detailed). utf-8 for the same reason:
+    # the default here is the locale encoding, which is also cp1252 on Windows.
     file_handler = logging.handlers.RotatingFileHandler(
         LOG_FILE,
         maxBytes=10 * 1024 * 1024,  # 10MB
         backupCount=5,  # Keep 5 backup files
+        encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(LOG_FORMAT)

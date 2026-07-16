@@ -15,11 +15,18 @@ export default function QueryInterface({ selectedDb, onLogout }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [queryMode, setQueryMode] = useState('natural') // 'natural' or 'direct'
+  const [conversationId, setConversationId] = useState(null)
   const messagesEndRef = useRef(null)
 
   const executeQuery = async (query, currentToken, mode = 'natural') => {
     const endpoint = mode === 'direct' ? 'query' : 'natural-query'
-    const bodyKey = mode === 'direct' ? 'query' : 'question'
+
+    // Natural language turns carry the conversation so follow-ups like
+    // "now only last month" resolve against the previous question.
+    const body =
+      mode === 'direct'
+        ? { query }
+        : { question: query, conversation_id: conversationId }
 
     const response = await fetch(`http://localhost:8000/api/databases/${selectedDb.id}/${endpoint}`, {
       method: 'POST',
@@ -27,7 +34,7 @@ export default function QueryInterface({ selectedDb, onLogout }) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${currentToken}`,
       },
-      body: JSON.stringify({ [bodyKey]: query }),
+      body: JSON.stringify(body),
     })
 
     if (response.status === 401) {
@@ -66,10 +73,7 @@ export default function QueryInterface({ selectedDb, onLogout }) {
 
   useEffect(() => {
     if (selectedDb) {
-      const isMongoDb = selectedDb.db_type?.toLowerCase() === 'mongodb'
-      const connectionInfo = isMongoDb
-        ? `Connected to MongoDB: ${selectedDb.name}\n\nYou can now use:\n• Natural Language: Ask questions like "Get users over 25"\n• Direct Query: Use MongoDB find() or aggregation format`
-        : `Connected to ${selectedDb.db_type}: ${selectedDb.name}\n\nYou can use natural language or ${selectedDb.db_type} queries.`
+      const connectionInfo = `Connected to ${selectedDb.db_type}: ${selectedDb.name}\n\nAsk a question in plain English, or write a query yourself. Follow-ups keep the context of the previous question.`
 
       setMessages([
         {
@@ -78,6 +82,9 @@ export default function QueryInterface({ selectedDb, onLogout }) {
           content: connectionInfo,
         },
       ])
+
+      // A conversation belongs to one database; switching starts a new one.
+      setConversationId(null)
 
       // Default to natural language for all databases
       setQueryMode('natural')
@@ -102,15 +109,18 @@ export default function QueryInterface({ selectedDb, onLogout }) {
     try {
       const data = await executeQuery(input, token, queryMode)
 
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id)
+      }
+
       const assistantMessage = {
         id: messages.length + 2,
         type: 'query_result',
-        generatedQuery: data.sql || data.query || null,
-        queryType: data.query_type || null,
+        generatedQuery: data.query || null,
+        message: data.message || null,
         columns: data.columns || [],
         rows: data.rows || [],
         row_count: data.row_count || 0,
-        dbType: selectedDb.db_type?.toLowerCase(),
       }
       setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
@@ -126,28 +136,10 @@ export default function QueryInterface({ selectedDb, onLogout }) {
   }
 
   const getQueryTypeLabel = () => {
-    const dbType = selectedDb?.db_type?.toLowerCase()
     if (queryMode === 'natural') {
       return 'Natural Language'
     }
-    if (dbType === 'mongodb') {
-      return 'MongoDB Query'
-    }
     return 'SQL Query'
-  }
-
-  const getGeneratedQueryLabel = (queryType) => {
-    if (queryType === 'mongodb') {
-      return 'Generated MongoDB Query:'
-    }
-    if (queryType === 'sql') {
-      return 'Generated SQL:'
-    }
-    const dbType = selectedDb?.db_type?.toLowerCase()
-    if (dbType === 'mongodb') {
-      return 'Generated MongoDB Query:'
-    }
-    return 'Generated SQL:'
   }
 
   return (
@@ -209,7 +201,7 @@ export default function QueryInterface({ selectedDb, onLogout }) {
                 {msg.generatedQuery && (
                   <div className="bg-white rounded-lg border border-gray-200 p-4">
                     <p className="text-xs font-semibold text-gray-600 mb-2">
-                      {getGeneratedQueryLabel(msg.queryType)}
+                      Generated SQL:
                     </p>
                     <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">
                       <code>{msg.generatedQuery}</code>
@@ -219,7 +211,9 @@ export default function QueryInterface({ selectedDb, onLogout }) {
 
                 {msg.row_count === 0 ? (
                   <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <p className="text-sm text-gray-700">Query executed successfully. No results returned.</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {msg.message || 'Query executed successfully. No results returned.'}
+                    </p>
                   </div>
                 ) : (
                   <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -316,7 +310,7 @@ export default function QueryInterface({ selectedDb, onLogout }) {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                📝 {selectedDb?.db_type?.toLowerCase() === 'mongodb' ? 'MongoDB Query' : 'SQL Query'}
+                📝 SQL Query
               </button>
             </div>
 
@@ -326,16 +320,12 @@ export default function QueryInterface({ selectedDb, onLogout }) {
                 onChange={e => setInput(e.target.value)}
                 placeholder={
                   queryMode === 'natural'
-                    ? selectedDb?.db_type?.toLowerCase() === 'mongodb'
-                      ? 'Ask a question like "Get users over 25"...'
-                      : 'Ask a question about your data...'
-                    : selectedDb?.db_type?.toLowerCase() === 'mongodb'
-                    ? `collection_name\\n{"filter": "value"}`
+                    ? 'Ask a question about your data...'
                     : 'Enter SQL query...'
                 }
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 disabled={loading}
-                rows={queryMode === 'direct' && selectedDb?.db_type?.toLowerCase() === 'mongodb' ? 3 : 1}
+                rows={1}
               />
               <button
                 type="submit"

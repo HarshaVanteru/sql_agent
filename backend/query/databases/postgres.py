@@ -1,8 +1,10 @@
 """PostgreSQL database connection and query execution."""
 import logging
 from urllib.parse import quote_plus
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from fastapi import HTTPException, status
+
+from backend.query.databases.engines import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +16,7 @@ def create_postgres_connection(host: str, port: int, username: str, password: st
         encoded_password = quote_plus(password)
         db_url = f"postgresql+psycopg2://{encoded_user}:{encoded_password}@{host}:{port}/{database_name}"
         logger.debug(f"PostgreSQL connection URL: postgresql+psycopg2://{username}:***@{host}:{port}/{database_name}")
-        engine = create_engine(db_url, echo=False)
-        return engine
+        return get_engine(db_url)
     except Exception as e:
         logger.error(f"Failed to create PostgreSQL connection: {str(e)}", exc_info=True)
         raise HTTPException(

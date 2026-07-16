@@ -1,1 +1,1 @@
-﻿"""Authentication and user management module."""
+"""Authentication and user management module."""

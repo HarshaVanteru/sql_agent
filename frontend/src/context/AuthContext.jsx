@@ -98,37 +98,6 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const verifyEmail = async (userId, code) => {
-    setError(null)
-    try {
-      const response = await fetch('http://localhost:8000/auth/verify-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, code }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Verification failed')
-      }
-
-      const data = await response.json()
-      if (data.access_token) {
-        localStorage.setItem('auth_token', data.access_token)
-        if (data.refresh_token) {
-          localStorage.setItem('refresh_token', data.refresh_token)
-          setRefreshToken(data.refresh_token)
-        }
-        setToken(data.access_token)
-        setUser(data.user)
-      }
-      return { success: true }
-    } catch (err) {
-      setError(err.message)
-      return { success: false, error: err.message }
-    }
-  }
-
   const refreshAccessToken = async () => {
     if (!refreshToken) {
       setError('No refresh token available')
@@ -158,13 +127,34 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const storedToken = localStorage.getItem('auth_token')
+    const storedRefresh = localStorage.getItem('refresh_token')
+
+    // Clear locally regardless of whether the server call lands: the refresh
+    // session is revoked server-side, but a failed request must not strand the
+    // user in a logged-in UI.
     localStorage.removeItem('auth_token')
     localStorage.removeItem('refresh_token')
     setToken(null)
     setRefreshToken(null)
     setUser(null)
     setError(null)
+
+    if (storedToken) {
+      try {
+        await fetch('http://localhost:8000/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}`,
+          },
+          body: JSON.stringify({ refresh_token: storedRefresh }),
+        })
+      } catch {
+        // Already signed out locally; nothing useful to surface.
+      }
+    }
   }
 
   const clearError = () => setError(null)
@@ -178,7 +168,6 @@ export const AuthProvider = ({ children }) => {
         error,
         signup,
         login,
-        verifyEmail,
         refreshAccessToken,
         logout,
         clearError,

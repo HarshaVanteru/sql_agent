@@ -32,7 +32,6 @@ class Database(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     db_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    system_prompt: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -40,8 +39,10 @@ class Database(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped[User] = relationship(back_populates="databases")
-    credentials: Mapped[list[DatabaseCredential]] = relationship(
+    # One-directional: auth owns User and should not need to know what else
+    # references it. Deleting a user still cascades via the FK.
+    user: Mapped[User] = relationship()
+    credentials: Mapped[DatabaseCredential] = relationship(
         back_populates="database", cascade="all, delete-orphan", uselist=False
     )
 

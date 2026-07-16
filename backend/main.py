@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.auth.signin import router as signin_router
-from backend.auth.signout import router as signout_router
-from backend.auth.signup import router as signup_router
+from backend.auth.router import router as auth_router
 from backend.database.router import router as database_router
 from backend.query.router import router as query_router
 from backend.logging_config import setup_logging
@@ -21,8 +19,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-app.include_router(signin_router)
-app.include_router(signout_router)
-app.include_router(signup_router)
+app.include_router(auth_router)
 app.include_router(database_router)
 app.include_router(query_router)

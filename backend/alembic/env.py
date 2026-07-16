@@ -11,7 +11,13 @@ from alembic import context
 # Add parent directory to path to import backend modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import backend.config  # noqa: F401  -- loads backend/.env so DATABASE_URL is set
 from backend.auth.models import Base
+
+# Imported for their side effect: every model must be registered on Base.metadata
+# for autogenerate to see the full schema.
+import backend.database.models  # noqa: F401
+import backend.query.models  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,9 +32,15 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Get database URL from environment or use default (use sync driver for migrations)
-db_url = os.environ.get("DATABASE_URL", "mysql+pymysql://root:root@localhost:3306/ecom_analytics")
-# Convert async URL to sync if needed
+# Database URL comes from the environment (backend/.env, loaded above), or from an
+# explicit DATABASE_URL which takes precedence. There is deliberately no default:
+# a fallback here would quietly migrate whichever database it names.
+try:
+    db_url = os.environ["DATABASE_URL"]
+except KeyError:
+    raise SystemExit("DATABASE_URL is not set (expected in backend/.env or the environment)")
+
+# Migrations run on the sync driver.
 if "aiomysql" in db_url:
     db_url = db_url.replace("mysql+aiomysql://", "mysql+pymysql://")
 if "asyncpg" in db_url:

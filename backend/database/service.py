@@ -7,10 +7,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.models import Database, DatabaseCredential
-from backend.query.prompts import get_default_prompt
 from backend.query.databases.mysql import create_mysql_connection
 from backend.query.databases.postgres import create_postgres_connection
-from backend.query.databases.mongodb import create_mongodb_connection
 from .schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
     DatabaseCredentialInput
@@ -55,22 +53,6 @@ def _parse_postgres_error(error: Exception) -> str:
         return f"Connection failed: {str(error).split('(')[0].strip()}"
 
 
-def _parse_mongodb_error(error: Exception) -> str:
-    """Extract user-friendly error message from MongoDB errors."""
-    error_str = str(error).lower()
-
-    if "authentication failed" in error_str or "auth failed" in error_str:
-        return "Invalid username or password"
-    elif "getaddrinfo failed" in error_str or "unknown host" in error_str:
-        return "Invalid hostname - cannot resolve address"
-    elif "connection refused" in error_str:
-        return "Cannot connect to MongoDB server - connection refused"
-    elif "timeout" in error_str or "timed out" in error_str:
-        return "Connection timeout - server not responding"
-    else:
-        return f"Connection failed: {str(error).split(':')[0].strip()}"
-
-
 async def validate_database_credentials(db_type: str, host: str, port: int, username: str, password: str, database_name: str) -> None:
     """Validate database credentials by attempting to connect and run a test query.
 
@@ -106,20 +88,6 @@ async def validate_database_credentials(db_type: str, host: str, port: int, user
                 detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
             )
 
-    elif db_type_lower == "mongodb":
-        try:
-            client = create_mongodb_connection(host, port, username, password, database_name)
-            client.close()
-            logger.info(f"MongoDB credentials validated for {host}:{port}/{database_name}")
-        except HTTPException:
-            raise
-        except Exception as e:
-            error_msg = _parse_mongodb_error(e)
-            logger.warning(f"MongoDB validation failed: {error_msg}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
-            )
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -161,22 +129,12 @@ async def create_database(
     db_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
-    # Get default prompt for the database type
-    try:
-        default_prompt = get_default_prompt(body.db_type)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "UNSUPPORTED_DB_TYPE", "message": str(e)},
-        )
-
     # Create database
     database = Database(
         id=db_id,
         user_id=user_id,
         name=body.name,
         db_type=body.db_type,
-        system_prompt=default_prompt,
         created_at=now,
         updated_at=now,
     )

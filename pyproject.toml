@@ -1,35 +1,34 @@
 [project]
-name = "ecom-analytics"
+name = "sql-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Ask your MySQL or PostgreSQL database questions in plain English."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    # API
     "fastapi>=0.138.0",
-    "langchain>=1.3.11",
-    "langchain-groq>=1.1.3",
-    "langgraph>=1.2.6",
-    "pydantic>=2.13.4",
-    "psycopg2-binary>=2.9.0",
-    "pymysql>=1.2.0",
-    "python-dotenv>=1.2.2",
-    "sqlalchemy>=2.0.51",
     "uvicorn>=0.49.0",
-    "langsmith>=0.9.0",
+    # Agent
+    "langchain-core>=1.4.8",
+    "langchain-groq>=1.1.3",
+    # Database
+    "sqlalchemy>=2.0.51",
     "alembic>=1.18.4",
-    "aiomysql>=0.3.2",
-    "asyncpg>=0.31.0",
-    "pymongo>=4.17.0",
-    "pydantic-settings>=2.14.2",
-    "python-multipart>=0.0.32",
-    "pyjwt>=2.13.0",
+    "aiomysql>=0.3.2",       # app database, async (DATABASE_URL)
+    "pymysql>=1.2.0",        # app database for migrations; also MySQL query targets
+    "psycopg2-binary>=2.9.0",  # PostgreSQL query targets
+    "asyncpg>=0.31.0",       # only needed if the app database itself is PostgreSQL
+    # Auth
     "python-jose>=3.5.0",
     "bcrypt>=5.0.0",
-    "passlib>=1.7.4",
-    "httpx>=0.28.1",
-    "requests>=2.34.2",
-    "redis>=8.0.1",
-    "aiosmtplib>=5.1.2",
-    "pyotp>=2.10.0",
-    "qrcode>=8.2",
+    # Config and validation
+    "pydantic>=2.13.4",
+    "email-validator>=2.2.0",  # required by pydantic's EmailStr
+    "python-dotenv>=1.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.20.0",  # lets the test suite run the app against SQLite
+    "httpx>=0.28.1",      # required by starlette's TestClient
 ]

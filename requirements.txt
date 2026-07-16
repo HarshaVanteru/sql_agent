@@ -1,27 +1,24 @@
+# API
 fastapi
 uvicorn
-langchain
-langchain_groq
-langgraph
-langsmith
+
+# Agent
+langchain-core
+langchain-groq
+
+# Database
 sqlalchemy
 alembic
-pymysql
-psycopg2-binary
-aiomysql
-asyncpg
-pymongo
-python-dotenv
+aiomysql          # app database, async (DATABASE_URL)
+pymysql           # app database for migrations; also MySQL targets the agent queries
+psycopg2-binary   # PostgreSQL targets the agent queries
+asyncpg           # only needed if the app database itself is PostgreSQL
+
+# Auth
+python-jose       # JWT encode/decode
+bcrypt            # password hashing
+
+# Config and validation
 pydantic
-pydantic-settings
-python-multipart
-PyJWT
-python-jose
-bcrypt
-passlib
-httpx
-requests
-redis
-aiosmtplib
-pyotp
-qrcode
+email-validator   # required by pydantic's EmailStr
+python-dotenv

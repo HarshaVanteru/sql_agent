@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth._core import get_current_user, get_db
+from backend.auth.deps import get_current_user, get_db
 from backend.auth.models import User
 from .schemas import QueryRequest, QueryResponse, NaturalLanguageQueryRequest, NaturalLanguageQueryResponse
 from .service import execute_query, execute_natural_language_query
@@ -32,10 +32,9 @@ async def query_natural_language(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> NaturalLanguageQueryResponse:
-    """Execute a natural language query (converts to SQL/MongoDB query using LLM).
+    """Execute a natural language query (converts to SQL using LLM).
 
     Supports:
     - MySQL & PostgreSQL: Converts to SQL
-    - MongoDB: Converts to MongoDB query or aggregation pipeline
     """
     return await execute_natural_language_query(str(current_user.id), database_id, body, db)
