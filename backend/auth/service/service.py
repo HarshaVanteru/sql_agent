@@ -1,10 +1,10 @@
 """Business logic for authentication."""
 from __future__ import annotations
 
-import logging
 import os
 from datetime import datetime, timedelta, timezone
 
+import logfire
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,8 +27,6 @@ from backend.auth.schemas import (
     SignupResponse,
     UserResponse,
 )
-
-logger = logging.getLogger(__name__)
 
 # Consecutive failures before an account is locked, and for how long.
 LOGIN_MAX_ATTEMPTS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
@@ -77,7 +75,7 @@ async def signup(body: SignupRequest, db: AsyncSession) -> SignupResponse:
     db.add(user)
     await db.commit()
 
-    logger.info(f"Account created: {user.id}")
+    logfire.info("Account created: {user_id}", user_id=user.id)
     return SignupResponse(user_id=user.id, message="Account created. You can now log in.")
 
 
@@ -96,7 +94,7 @@ async def login(body: LoginRequest, db: AsyncSession) -> LoginResponse:
 
     if user.locked_until and _as_utc(user.locked_until) > now:
         remaining = int((_as_utc(user.locked_until) - now).total_seconds())
-        logger.warning(f"Login attempt on locked account {user.id}")
+        logfire.warning("Login attempt on locked account {user_id}", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
@@ -111,9 +109,18 @@ async def login(body: LoginRequest, db: AsyncSession) -> LoginResponse:
         if user.failed_login_attempts >= LOGIN_MAX_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
-            logger.warning(f"Account {user.id} locked for {LOGIN_LOCKOUT_MINUTES}m after repeated failures")
+            logfire.warning(
+                "Account {user_id} locked for {lockout_minutes}m after repeated failures",
+                user_id=user.id,
+                lockout_minutes=LOGIN_LOCKOUT_MINUTES,
+            )
         else:
-            logger.info(f"Failed login for user {user.id} ({user.failed_login_attempts}/{LOGIN_MAX_ATTEMPTS})")
+            logfire.info(
+                "Failed login for user {user_id} ({failed_attempts}/{max_attempts})",
+                user_id=user.id,
+                failed_attempts=user.failed_login_attempts,
+                max_attempts=LOGIN_MAX_ATTEMPTS,
+            )
         await db.commit()
         raise _invalid_credentials()
 
@@ -135,7 +142,7 @@ async def login(body: LoginRequest, db: AsyncSession) -> LoginResponse:
     ))
     await db.commit()
 
-    logger.info(f"Login: {user.id}")
+    logfire.info("Login: {user_id}", user_id=user.id)
     return LoginResponse(
         access_token=create_access_token(user.id),
         refresh_token=raw_refresh,
@@ -181,5 +188,9 @@ async def logout(refresh_token: str | None, user_id: str, db: AsyncSession) -> d
         session.revoked_at = now
     await db.commit()
 
-    logger.info(f"Logout: revoked {len(sessions)} session(s) for user {user_id}")
+    logfire.info(
+        "Logout: revoked {session_count} session(s) for user {user_id}",
+        session_count=len(sessions),
+        user_id=user_id,
+    )
     return {"message": "Logged out"}

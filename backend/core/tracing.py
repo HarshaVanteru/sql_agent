@@ -5,10 +5,9 @@ directly (LANGCHAIN_TRACING_V2, LANGCHAIN_API_KEY, LANGCHAIN_PROJECT -- see
 backend/.env.example). This module doesn't configure tracing; it just reports
 at startup whether it's on, so a missing key is obvious instead of silent.
 """
-import logging
 import os
 
-logger = logging.getLogger(__name__)
+import logfire
 
 _TRUTHY = {"1", "true", "yes", "on"}
 
@@ -21,14 +20,14 @@ def tracing_enabled() -> bool:
 def log_tracing_status() -> None:
     """Log whether LangSmith tracing is active. Called once at startup."""
     if not tracing_enabled():
-        logger.info("LangSmith tracing disabled")
+        logfire.info("LangSmith tracing disabled")
         return
 
     project = os.getenv("LANGCHAIN_PROJECT") or os.getenv("LANGSMITH_PROJECT") or "default"
     has_key = bool(os.getenv("LANGCHAIN_API_KEY") or os.getenv("LANGSMITH_API_KEY"))
     if has_key:
-        logger.info(f"LangSmith tracing enabled (project: {project})")
+        logfire.info("LangSmith tracing enabled (project: {project})", project=project)
     else:
-        logger.warning(
+        logfire.warning(
             "Tracing is on but no LangSmith API key is set; traces will not be sent"
         )

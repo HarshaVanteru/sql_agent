@@ -1,1 +1,1 @@
-"""Cross-cutting application setup: environment loading and logging."""
+"""Cross-cutting application setup: environment loading and observability."""

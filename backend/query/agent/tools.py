@@ -3,15 +3,13 @@
 Schema introspection goes through SQLAlchemy's inspector rather than raw
 information_schema queries so the same tools work on every supported dialect.
 """
-import logging
 import os
 
+import logfire
 from langchain_core.tools import tool
 from sqlalchemy import inspect, text
 
 from backend.query.guard import guard_query
-
-logger = logging.getLogger(__name__)
 
 # Rows fetched from the database at most, per query.
 MAX_ROWS = int(os.getenv("AGENT_MAX_ROWS", "1000"))
@@ -76,7 +74,7 @@ def build_tools(engine):
         try:
             names = inspect(engine).get_table_names()
         except Exception as e:
-            logger.error(f"list_tables failed: {e}")
+            logfire.exception("list_tables failed: {error}", error=str(e))
             return f"Error listing tables: {e}"
         return ", ".join(sorted(names)) if names else "(database has no tables)"
 
@@ -101,7 +99,11 @@ def build_tools(engine):
 
             return "\n".join(lines)
         except Exception as e:
-            logger.error(f"describe_table({table_name}) failed: {e}")
+            logfire.exception(
+                "describe_table({table_name}) failed: {error}",
+                table_name=table_name,
+                error=str(e),
+            )
             return f"Error describing '{table_name}': {e}"
 
     @tool
@@ -110,24 +112,31 @@ def build_tools(engine):
 
         The last query that succeeds is what the user sees, so make it complete.
         """
-        rejection = guard_query(query, dialect=dialect, database_name=database_name)
-        if rejection:
-            logger.warning(f"Agent query rejected: {rejection}")
-            return f"Rejected: {rejection}"
+        with logfire.span("Agent query: {query_preview}", query_preview=query[:200]):
+            rejection = guard_query(query, dialect=dialect, database_name=database_name)
+            if rejection:
+                logfire.warning("Agent query rejected: {rejection}", rejection=rejection)
+                return f"Rejected: {rejection}"
 
-        try:
-            with engine.connect() as conn:
-                result = conn.execute(text(query))
-                columns = list(result.keys())
-                rows = [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)]
-        except Exception as e:
-            # Handed back verbatim so the agent can correct itself from the
-            # database's own error rather than guessing.
-            logger.info(f"Agent query failed, returning error to agent: {e}")
-            return f"Error: {e}"
+            try:
+                with engine.connect() as conn:
+                    result = conn.execute(text(query))
+                    columns = list(result.keys())
+                    rows = [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)]
+            except Exception as e:
+                # Handed back verbatim so the agent can correct itself from the
+                # database's own error rather than guessing.
+                logfire.info(
+                    "Agent query failed, returning error to agent: {error}", error=str(e)
+                )
+                return f"Error: {e}"
 
-        recorder.record(query, columns, rows)
-        logger.info(f"Agent query succeeded ({len(rows)} rows): {query[:200]}")
-        return _format_rows(columns, rows)
+            recorder.record(query, columns, rows)
+            logfire.info(
+                "Agent query succeeded ({row_count} rows): {query_preview}",
+                row_count=len(rows),
+                query_preview=query[:200],
+            )
+            return _format_rows(columns, rows)
 
     return [list_tables, describe_table, run_query], recorder

@@ -1,7 +1,8 @@
 """Business logic for database management."""
 import uuid
-import logging
 from datetime import datetime, timezone
+
+import logfire
 from fastapi import HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
@@ -15,8 +16,6 @@ from ..schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
     DatabaseCredentialOut
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _parse_mysql_error(error: Exception) -> str:
@@ -62,39 +61,56 @@ async def validate_database_credentials(db_type: str, host: str, port: int, user
     """
     db_type_lower = db_type.lower()
 
-    if db_type_lower == "mysql":
-        try:
-            engine = create_mysql_connection(host, port, username, password, database_name)
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            logger.info(f"MySQL credentials validated for {host}:{port}/{database_name}")
-        except Exception as e:
-            error_msg = _parse_mysql_error(e)
-            logger.warning(f"MySQL validation failed: {error_msg}")
+    with logfire.span(
+        "Validating {db_type} credentials for {host}:{port}/{database_name}",
+        db_type=db_type,
+        host=host,
+        port=port,
+        database_name=database_name,
+    ):
+        if db_type_lower == "mysql":
+            try:
+                engine = create_mysql_connection(host, port, username, password, database_name)
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                logfire.info(
+                    "MySQL credentials validated for {host}:{port}/{database_name}",
+                    host=host,
+                    port=port,
+                    database_name=database_name,
+                )
+            except Exception as e:
+                error_msg = _parse_mysql_error(e)
+                logfire.warning("MySQL validation failed: {error}", error=error_msg)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+                )
+
+        elif db_type_lower == "postgresql":
+            try:
+                engine = create_postgres_connection(host, port, username, password, database_name)
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                logfire.info(
+                    "PostgreSQL credentials validated for {host}:{port}/{database_name}",
+                    host=host,
+                    port=port,
+                    database_name=database_name,
+                )
+            except Exception as e:
+                error_msg = _parse_postgres_error(e)
+                logfire.warning("PostgreSQL validation failed: {error}", error=error_msg)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+                )
+
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
+                detail={"code": "UNSUPPORTED_DB_TYPE", "message": f"Unsupported database type: {db_type}"},
             )
-
-    elif db_type_lower == "postgresql":
-        try:
-            engine = create_postgres_connection(host, port, username, password, database_name)
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            logger.info(f"PostgreSQL credentials validated for {host}:{port}/{database_name}")
-        except Exception as e:
-            error_msg = _parse_postgres_error(e)
-            logger.warning(f"PostgreSQL validation failed: {error_msg}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
-            )
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "UNSUPPORTED_DB_TYPE", "message": f"Unsupported database type: {db_type}"},
-        )
 
 
 async def create_database(

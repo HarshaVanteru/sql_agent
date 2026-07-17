@@ -1,7 +1,7 @@
 """Business logic for query execution."""
-import logging
 import os
 
+import logfire
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
@@ -27,8 +27,6 @@ from ..schemas import (
     ConversationDetailResponse,
     MessageResponse,
 )
-
-logger = logging.getLogger(__name__)
 
 # Turns replayed to the agent. Each turn is a question plus the SQL answering it,
 # so this bounds how much of a long conversation reaches the prompt.
@@ -62,7 +60,11 @@ def _credential_password(creds) -> str:
     try:
         return decrypt(creds.password)
     except ValueError as e:
-        logger.error(f"Could not decrypt credentials for database {creds.database_id}: {e}")
+        logfire.error(
+            "Could not decrypt credentials for database {database_id}: {error}",
+            database_id=creds.database_id,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"code": "CREDENTIALS_ERROR", "message": "Stored credentials could not be read"},
@@ -89,7 +91,11 @@ def _to_agent_history(messages: list[Message]) -> list:
 
 async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: AsyncSession) -> QueryResponse:
     """Execute a direct query against a user's database."""
-    logger.info(f"Executing query for user {user_id}, database {database_id}")
+    logfire.info(
+        "Executing query for user {user_id}, database {database_id}",
+        user_id=user_id,
+        database_id=database_id,
+    )
 
     # Get database and credentials (eager load credentials)
     result = await db.execute(
@@ -102,7 +108,11 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
     )
     database = result.unique().scalar_one_or_none()
     if not database:
-        logger.warning(f"Database {database_id} not found for user {user_id}")
+        logfire.warning(
+            "Database {database_id} not found for user {user_id}",
+            database_id=database_id,
+            user_id=user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "NOT_FOUND", "message": "Database not found"},
@@ -110,7 +120,9 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
 
     creds = database.credentials
     if not creds:
-        logger.warning(f"Credentials missing for database {database_id}")
+        logfire.warning(
+            "Credentials missing for database {database_id}", database_id=database_id
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"code": "MISSING_CREDS", "message": "Database credentials missing"},
@@ -124,7 +136,11 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
     dialect = "mysql" if db_type == "mysql" else "postgresql"
     rejection = guard_query(body.query, dialect=dialect, database_name=creds.database_name)
     if rejection:
-        logger.warning(f"Direct query rejected for database {database_id}: {rejection}")
+        logfire.warning(
+            "Direct query rejected for database {database_id}: {rejection}",
+            database_id=database_id,
+            rejection=rejection,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "QUERY_REJECTED", "message": rejection},
@@ -157,7 +173,11 @@ async def execute_natural_language_query(
     user_id: str, database_id: str, body: NaturalLanguageQueryRequest, db: AsyncSession
 ) -> NaturalLanguageQueryResponse:
     """Answer a natural language question with the SQL agent, in conversation context."""
-    logger.info(f"Processing NL query for user {user_id}, database {database_id}")
+    logfire.info(
+        "Processing NL query for user {user_id}, database {database_id}",
+        user_id=user_id,
+        database_id=database_id,
+    )
 
     # Get database and credentials
     result = await db.execute(
@@ -201,7 +221,11 @@ async def execute_natural_language_query(
     if body.conversation_id:
         conversation = await _load_conversation(user_id, database_id, body.conversation_id, db)
         history = _to_agent_history(conversation.messages)
-        logger.info(f"Continuing conversation {conversation.id} with {len(history)} prior message(s)")
+        logfire.info(
+            "Continuing conversation {conversation_id} with {history_messages} prior message(s)",
+            conversation_id=conversation.id,
+            history_messages=len(history),
+        )
 
     try:
         # The agent is synchronous and makes several LLM calls, so it has to run
@@ -215,7 +239,7 @@ async def execute_natural_language_query(
             database_name=creds.database_name,
         )
     except Exception as e:
-        logger.error(f"Natural language query failed: {str(e)}", exc_info=True)
+        logfire.exception("Natural language query failed: {error}", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "QUERY_ERROR", "message": f"Query processing failed: {str(e)}"},
@@ -223,7 +247,7 @@ async def execute_natural_language_query(
 
     if not agent_result.get("valid") or agent_result.get("error"):
         error = agent_result.get("error", "Query generation failed")
-        logger.error(f"Agent failed: {error}")
+        logfire.error("Agent failed: {error}", error=error)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "QUERY_ERROR", "message": error},
@@ -272,7 +296,11 @@ async def execute_natural_language_query(
     ))
     await db.commit()
 
-    logger.info(f"Agent answered with {len(rows)} row(s) in conversation {conversation.id}")
+    logfire.info(
+        "Agent answered with {row_count} row(s) in conversation {conversation_id}",
+        row_count=len(rows),
+        conversation_id=conversation.id,
+    )
     return NaturalLanguageQueryResponse(
         query=generated_query,
         columns=columns,

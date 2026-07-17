@@ -8,15 +8,13 @@ Caching is safe here because database credentials are immutable once created:
 there is no update endpoint, only create and delete, so a cached engine's URL
 can never go stale.
 """
-import logging
 import os
 from collections import OrderedDict
 from threading import Lock
 
+import logfire
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-
-logger = logging.getLogger(__name__)
 
 ENGINE_CACHE_SIZE = int(os.getenv("ENGINE_CACHE_SIZE", "20"))
 
@@ -40,6 +38,9 @@ def get_engine(url: str) -> Engine:
         while len(_engines) > ENGINE_CACHE_SIZE:
             _, evicted = _engines.popitem(last=False)
             evicted.dispose()
-            logger.info(f"Disposed least-recently-used engine (cache limit {ENGINE_CACHE_SIZE})")
+            logfire.info(
+                "Disposed least-recently-used engine (cache limit {cache_size})",
+                cache_size=ENGINE_CACHE_SIZE,
+            )
 
         return engine

@@ -1,7 +1,7 @@
 """The agent loop: give the model tools and let it work until it has an answer."""
-import logging
 import os
 
+import logfire
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
 from langsmith import get_current_run_tree, traceable
@@ -9,8 +9,6 @@ from langsmith import get_current_run_tree, traceable
 import backend.core.config  # noqa: F401  -- loads backend/.env before GROQ_API_KEY is read
 from backend.query.agent.prompts import get_agent_prompt
 from backend.query.agent.tools import build_tools
-
-logger = logging.getLogger(__name__)
 
 # Hard bound on tool-calling rounds. Without it a model that keeps calling tools
 # never returns, and every round is an LLM call the user waits on.
@@ -96,74 +94,96 @@ def run_agent(
     if engine is None:
         return _failure("Database connection not provided")
 
-    tools, recorder = build_tools(engine)
-    model = llm.bind_tools(tools)
-    tools_by_name = {t.name: t for t in tools}
+    with logfire.span(
+        "sql_agent: {question}",
+        question=question,
+        db_type=db_type,
+        database_name=database_name,
+        history_messages=len(history or []),
+    ) as span:
+        tools, recorder = build_tools(engine)
+        model = llm.bind_tools(tools)
+        tools_by_name = {t.name: t for t in tools}
 
-    messages = [
-        SystemMessage(content=get_agent_prompt(db_type, database_name)),
-        *history,
-        HumanMessage(content=question),
-    ]
+        messages = [
+            SystemMessage(content=get_agent_prompt(db_type, database_name)),
+            *history,
+            HumanMessage(content=question),
+        ]
 
-    iterations = 0
-    stopped_early = False
-    final_text = ""
+        iterations = 0
+        stopped_early = False
+        final_text = ""
 
-    for iterations in range(1, MAX_ITERATIONS + 1):
-        response = model.invoke(messages)
-        messages.append(response)
+        for iterations in range(1, MAX_ITERATIONS + 1):
+            response = model.invoke(messages)
+            messages.append(response)
 
-        if not response.tool_calls:
-            final_text = _text_of(response)
-            break
+            if not response.tool_calls:
+                final_text = _text_of(response)
+                break
 
-        for call in response.tool_calls:
-            tool = tools_by_name.get(call["name"])
-            if tool is None:
-                output = f"Unknown tool: {call['name']}"
-            else:
-                try:
-                    output = tool.invoke(call["args"])
-                except Exception as e:
-                    # Tools catch their own errors; this is a bad-arguments case,
-                    # which the model can correct on the next round.
-                    logger.warning(f"Tool {call['name']} raised: {e}")
-                    output = f"Error: {e}"
+            for call in response.tool_calls:
+                tool = tools_by_name.get(call["name"])
+                if tool is None:
+                    output = f"Unknown tool: {call['name']}"
+                else:
+                    try:
+                        output = tool.invoke(call["args"])
+                    except Exception as e:
+                        # Tools catch their own errors; this is a bad-arguments case,
+                        # which the model can correct on the next round.
+                        logfire.warning(
+                            "Tool {tool_name} raised: {error}",
+                            tool_name=call["name"],
+                            error=str(e),
+                        )
+                        output = f"Error: {e}"
 
-            messages.append(ToolMessage(content=str(output), tool_call_id=call["id"]))
-    else:
-        stopped_early = True
-        logger.warning(f"Agent hit the {MAX_ITERATIONS}-iteration cap")
+                messages.append(ToolMessage(content=str(output), tool_call_id=call["id"]))
+        else:
+            stopped_early = True
+            logfire.warning(
+                "Agent hit the {max_iterations}-iteration cap", max_iterations=MAX_ITERATIONS
+            )
 
-    _annotate_run(iterations=iterations, stopped_early=stopped_early)
+        span.set_attribute("iterations", iterations)
+        span.set_attribute("stopped_early", stopped_early)
+        _annotate_run(iterations=iterations, stopped_early=stopped_early)
 
-    if not recorder.has_result:
-        # No data, but the agent did reply: a greeting, a refusal, or a request
-        # to clarify. That is a real answer, not a failure.
-        if final_text:
-            logger.info(f"Agent answered without a query: {final_text[:120]}")
-            return {
-                "valid": True,
-                "error": None,
-                "query": None,
-                "result": _EMPTY_RESULT,
-                "message": final_text,
-            }
+        if not recorder.has_result:
+            # No data, but the agent did reply: a greeting, a refusal, or a request
+            # to clarify. That is a real answer, not a failure.
+            if final_text:
+                logfire.info(
+                    "Agent answered without a query: {answer_preview}",
+                    answer_preview=final_text[:120],
+                )
+                return {
+                    "valid": True,
+                    "error": None,
+                    "query": None,
+                    "result": _EMPTY_RESULT,
+                    "message": final_text,
+                }
 
-        error = (
-            f"The agent stopped after {MAX_ITERATIONS} steps without an answer."
-            if stopped_early
-            else "The agent produced no answer for this question."
+            error = (
+                f"The agent stopped after {MAX_ITERATIONS} steps without an answer."
+                if stopped_early
+                else "The agent produced no answer for this question."
+            )
+            logfire.error("Agent produced no result: {error}", error=error)
+            return _failure(error)
+
+        logfire.info(
+            "Agent finished in {iterations} iteration(s): {query_preview}",
+            iterations=iterations,
+            query_preview=recorder.query[:200],
         )
-        logger.error(f"Agent produced no result: {error}")
-        return _failure(error)
-
-    logger.info(f"Agent finished in {iterations} iteration(s): {recorder.query[:200]}")
-    return {
-        "valid": True,
-        "error": None,
-        "query": recorder.query,
-        "result": {"columns": recorder.columns, "rows": recorder.rows},
-        "message": final_text or None,
-    }
+        return {
+            "valid": True,
+            "error": None,
+            "query": recorder.query,
+            "result": {"columns": recorder.columns, "rows": recorder.rows},
+            "message": final_text or None,
+        }

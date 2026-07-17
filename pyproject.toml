@@ -26,6 +26,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "email-validator>=2.2.0",  # required by pydantic's EmailStr
     "python-dotenv>=1.2.2",
+    "logfire[fastapi,httpx,sqlalchemy]>=4.37.0",
 ]
 
 [dependency-groups]
