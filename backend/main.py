@@ -4,9 +4,11 @@ from backend.auth.router import router as auth_router
 from backend.database.router import router as database_router
 from backend.query.router import router as query_router
 from backend.core.logging_config import setup_logging
+from backend.core.tracing import log_tracing_status
 
 # Initialize logging
 setup_logging()
+log_tracing_status()
 
 app = FastAPI()
 

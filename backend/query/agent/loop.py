@@ -4,6 +4,7 @@ import os
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
+from langsmith import get_current_run_tree, traceable
 
 import backend.core.config  # noqa: F401  -- loads backend/.env before GROQ_API_KEY is read
 from backend.query.agent.prompts import get_agent_prompt
@@ -35,6 +36,50 @@ def _failure(error: str) -> dict:
     return {"valid": False, "error": error, "query": None, "result": None, "message": None}
 
 
+def _trace_inputs(inputs: dict) -> dict:
+    """What to show as the trace's inputs: the question and target, not the live
+    engine handle or the replayed history (noisy and unserializable)."""
+    return {
+        "question": inputs.get("question"),
+        "db_type": inputs.get("db_type"),
+        "database_name": inputs.get("database_name"),
+        "history_messages": len(inputs.get("history") or []),
+    }
+
+
+def _trace_outputs(output: dict) -> dict:
+    """Summarise the result for the trace, dropping the (potentially large) rows."""
+    result = output.get("result") or {}
+    return {
+        "valid": output.get("valid"),
+        "query": output.get("query"),
+        "message": output.get("message"),
+        "error": output.get("error"),
+        "row_count": len(result.get("rows") or []),
+    }
+
+
+def _annotate_run(**metadata) -> None:
+    """Attach extra fields to the current LangSmith run, if tracing is active.
+
+    get_current_run_tree() returns None when tracing is off, so this is a no-op
+    then; the try/except keeps a tracing hiccup from ever failing a real query.
+    """
+    try:
+        run = get_current_run_tree()
+        if run is not None:
+            run.metadata.update(metadata)
+    except Exception:
+        pass
+
+
+@traceable(
+    run_type="chain",
+    name="sql_agent",
+    tags=["sql-agent"],
+    process_inputs=_trace_inputs,
+    process_outputs=_trace_outputs,
+)
 def run_agent(
     question: str,
     history: list,
@@ -90,6 +135,8 @@ def run_agent(
     else:
         stopped_early = True
         logger.warning(f"Agent hit the {MAX_ITERATIONS}-iteration cap")
+
+    _annotate_run(iterations=iterations, stopped_early=stopped_early)
 
     if not recorder.has_result:
         # No data, but the agent did reply: a greeting, a refusal, or a request
