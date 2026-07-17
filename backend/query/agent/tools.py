@@ -65,6 +65,10 @@ def _format_rows(columns: list[str], rows: list[dict]) -> str:
 def build_tools(engine):
     """Build the agent's tools bound to `engine`, plus the recorder they write to."""
     recorder = QueryRecorder()
+    # Bound once from the engine so the guard can reject cross-database and
+    # system-schema access for this specific connection.
+    dialect = engine.dialect.name
+    database_name = engine.url.database
 
     @tool
     def list_tables() -> str:
@@ -106,7 +110,7 @@ def build_tools(engine):
 
         The last query that succeeds is what the user sees, so make it complete.
         """
-        rejection = guard_query(query)
+        rejection = guard_query(query, dialect=dialect, database_name=database_name)
         if rejection:
             logger.warning(f"Agent query rejected: {rejection}")
             return f"Rejected: {rejection}"

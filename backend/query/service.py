@@ -4,18 +4,29 @@ import os
 
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from langchain_core.messages import AIMessage, HumanMessage
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.crypto import decrypt
 from backend.database.models import Database
 from backend.query.agent.loop import run_agent
+from backend.query.guard import guard_query
 from backend.query.models import Conversation, Message
 from backend.query.databases.mysql import create_mysql_connection, execute_mysql_query
 from backend.query.databases.postgres import create_postgres_connection, execute_postgres_query
-from .schemas import QueryRequest, QueryResponse, NaturalLanguageQueryRequest, NaturalLanguageQueryResponse
+from .schemas import (
+    QueryRequest,
+    QueryResponse,
+    NaturalLanguageQueryRequest,
+    NaturalLanguageQueryResponse,
+    ConversationSummary,
+    ConversationListResponse,
+    ConversationDetailResponse,
+    MessageResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +70,21 @@ def _credential_password(creds) -> str:
 
 
 def _to_agent_history(messages: list[Message]) -> list:
-    """Convert stored messages into the message objects the agent expects."""
+    """Convert stored messages into the message objects the agent expects.
+
+    An assistant turn's SQL is replayed alongside its prose: the query is the
+    substantive artifact a follow-up builds on ("now filter that by 2024"),
+    which plain answer text alone would not carry.
+    """
     recent = messages[-MAX_HISTORY_MESSAGES:]
-    return [
-        HumanMessage(content=m.content) if m.role == "user" else AIMessage(content=m.content)
-        for m in recent
-    ]
+    out = []
+    for m in recent:
+        if m.role == "user":
+            out.append(HumanMessage(content=m.content))
+            continue
+        parts = [p for p in (m.content, f"SQL: {m.sql_query}" if m.sql_query else "") if p]
+        out.append(AIMessage(content="\n".join(parts)))
+    return out
 
 
 async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: AsyncSession) -> QueryResponse:
@@ -97,6 +117,18 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
         )
 
     db_type = database.db_type.lower()
+
+    # User-authored SQL is guarded exactly like the agent's: read-only, single
+    # statement, confined to this database. Without this a direct query could
+    # write, or reach other databases the connection's credentials can see.
+    dialect = "mysql" if db_type == "mysql" else "postgresql"
+    rejection = guard_query(body.query, dialect=dialect, database_name=creds.database_name)
+    if rejection:
+        logger.warning(f"Direct query rejected for database {database_id}: {rejection}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "QUERY_REJECTED", "message": rejection},
+        )
 
     password = _credential_password(creds)
 
@@ -213,6 +245,19 @@ async def execute_natural_language_query(
         )
         db.add(conversation)
         await db.flush()
+    else:
+        # Adding messages by foreign key does not dirty the conversation row, so
+        # its onupdate never fires. Touch it so "last active" ordering is right.
+        conversation.updated_at = func.now()
+
+    # jsonable_encoder makes the snapshot storable: rows can hold Decimal, date,
+    # and datetime values that the JSON column's plain dump would choke on. Only
+    # stored when a query actually ran; a greeting or refusal has no result.
+    result_snapshot = (
+        jsonable_encoder({"columns": columns, "rows": rows, "row_count": len(rows)})
+        if generated_query
+        else None
+    )
 
     # Added by foreign key rather than through conversation.messages: appending
     # to the collection would lazy-load it, and async SQLAlchemy cannot emit IO
@@ -221,7 +266,9 @@ async def execute_natural_language_query(
     db.add(Message(
         conversation_id=conversation.id,
         role="assistant",
-        content=generated_query or message or "",
+        content=message or "",
+        sql_query=generated_query,
+        result=result_snapshot,
     ))
     await db.commit()
 
@@ -233,4 +280,55 @@ async def execute_natural_language_query(
         row_count=len(rows),
         conversation_id=conversation.id,
         message=message,
+    )
+
+
+async def list_conversations(
+    user_id: str, database_id: str, db: AsyncSession
+) -> ConversationListResponse:
+    """List a database's conversations for this user, most recently active first."""
+    result = await db.execute(
+        select(Conversation, func.count(Message.id))
+        .outerjoin(Message, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.user_id == user_id,
+            Conversation.database_id == database_id,
+        )
+        .group_by(Conversation.id)
+        .order_by(Conversation.updated_at.desc())
+    )
+    summaries = [
+        ConversationSummary(
+            id=conversation.id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+            message_count=message_count,
+        )
+        for conversation, message_count in result.all()
+    ]
+    return ConversationListResponse(conversations=summaries, total=len(summaries))
+
+
+async def get_conversation_detail(
+    user_id: str, database_id: str, conversation_id: str, db: AsyncSession
+) -> ConversationDetailResponse:
+    """Return one conversation with its full message history."""
+    conversation = await _load_conversation(user_id, database_id, conversation_id, db)
+    return ConversationDetailResponse(
+        id=conversation.id,
+        title=conversation.title,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+        messages=[
+            MessageResponse(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                sql_query=m.sql_query,
+                result=m.result,
+                created_at=m.created_at,
+            )
+            for m in conversation.messages
+        ],
     )

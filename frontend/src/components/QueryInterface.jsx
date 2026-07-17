@@ -1,7 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 
-export default function QueryInterface({ selectedDb, onLogout }) {
+export default function QueryInterface({
+  selectedDb,
+  activeConversationId,
+  onConversationChange,
+  onTurnComplete,
+  onLogout,
+}) {
   const { token, user, refreshAccessToken, logout } = useAuth()
   const [messages, setMessages] = useState([
     {
@@ -17,6 +23,10 @@ export default function QueryInterface({ selectedDb, onLogout }) {
   const [queryMode, setQueryMode] = useState('natural') // 'natural' or 'direct'
   const [conversationId, setConversationId] = useState(null)
   const messagesEndRef = useRef(null)
+  // The conversation currently rendered. Lets us ignore the parent echoing back
+  // an id this view already shows (e.g. one it just created) versus a genuine
+  // request to load a different, past conversation.
+  const syncedConvRef = useRef(null)
 
   const executeQuery = async (query, currentToken, mode = 'natural') => {
     const endpoint = mode === 'direct' ? 'query' : 'natural-query'
@@ -63,6 +73,63 @@ export default function QueryInterface({ selectedDb, onLogout }) {
     return response.json()
   }
 
+  const greetingMessage = (db) => ({
+    id: 1,
+    type: 'system',
+    content: `Connected to ${db.db_type}: ${db.name}\n\nAsk a question in plain English, or write a query yourself. Follow-ups keep the context of the previous question.`,
+  })
+
+  // Turn a stored message (GET .../conversations/{id}) into the shape this view
+  // renders, mirroring what handleSubmit builds for a live turn.
+  const storedToDisplay = (m) =>
+    m.role === 'user'
+      ? { id: m.id, type: 'user', content: m.content, mode: 'natural' }
+      : {
+          id: m.id,
+          type: 'query_result',
+          generatedQuery: m.sql_query || null,
+          message: m.content || null,
+          columns: m.result?.columns || [],
+          rows: m.result?.rows || [],
+          row_count: m.result?.row_count || 0,
+        }
+
+  const loadConversation = async (convId, currentToken = token) => {
+    setLoading(true)
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/databases/${selectedDb.id}/conversations/${convId}`,
+        { headers: { Authorization: `Bearer ${currentToken}` } },
+      )
+
+      if (response.status === 401) {
+        const refreshResult = await refreshAccessToken()
+        if (refreshResult.success) {
+          return loadConversation(convId, localStorage.getItem('auth_token'))
+        }
+        logout()
+        throw new Error('Session expired. Please log in again.')
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail?.message || 'Failed to load conversation')
+      }
+
+      const data = await response.json()
+      setMessages([greetingMessage(selectedDb), ...data.messages.map(storedToDisplay)])
+      setConversationId(convId)
+      syncedConvRef.current = convId
+    } catch (error) {
+      setMessages([
+        { id: 1, type: 'system', content: greetingMessage(selectedDb).content },
+        { id: 2, type: 'error', content: 'Failed to load conversation: ' + error.message },
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -72,24 +139,36 @@ export default function QueryInterface({ selectedDb, onLogout }) {
   }, [messages])
 
   useEffect(() => {
-    if (selectedDb) {
-      const connectionInfo = `Connected to ${selectedDb.db_type}: ${selectedDb.name}\n\nAsk a question in plain English, or write a query yourself. Follow-ups keep the context of the previous question.`
-
+    if (!selectedDb) {
       setMessages([
         {
           id: 1,
           type: 'system',
-          content: connectionInfo,
+          content: 'Select a database from the sidebar to start querying',
         },
       ])
-
-      // A conversation belongs to one database; switching starts a new one.
       setConversationId(null)
-
-      // Default to natural language for all databases
-      setQueryMode('natural')
+      syncedConvRef.current = null
+      return
     }
-  }, [selectedDb])
+
+    // Default to natural language for all databases.
+    setQueryMode('natural')
+
+    // The parent is echoing back a conversation this view already shows (the one
+    // it just created or loaded) — nothing to reload.
+    if (activeConversationId && activeConversationId === syncedConvRef.current) return
+
+    if (activeConversationId) {
+      loadConversation(activeConversationId)
+    } else {
+      // New chat, or a database switch: start from a clean greeting.
+      setMessages([greetingMessage(selectedDb)])
+      setConversationId(null)
+      syncedConvRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDb, activeConversationId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -111,6 +190,12 @@ export default function QueryInterface({ selectedDb, onLogout }) {
 
       if (data.conversation_id) {
         setConversationId(data.conversation_id)
+        // Mark as already displayed so the parent setting this id below does not
+        // trigger a reload of the very turn we are about to render.
+        syncedConvRef.current = data.conversation_id
+        if (data.conversation_id !== activeConversationId) {
+          onConversationChange?.(data.conversation_id)
+        }
       }
 
       const assistantMessage = {
@@ -123,6 +208,10 @@ export default function QueryInterface({ selectedDb, onLogout }) {
         row_count: data.row_count || 0,
       }
       setMessages(prev => [...prev, assistantMessage])
+
+      // Refresh the conversation list: a new turn changes titles, ordering
+      // (most-recently-active first), and message counts.
+      onTurnComplete?.()
     } catch (error) {
       const errorMessage = {
         id: messages.length + 2,

@@ -8,8 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.deps import get_current_user, get_db
 from backend.auth.models import User
-from .schemas import QueryRequest, QueryResponse, NaturalLanguageQueryRequest, NaturalLanguageQueryResponse
-from .service import execute_query, execute_natural_language_query
+from .schemas import (
+    QueryRequest,
+    QueryResponse,
+    NaturalLanguageQueryRequest,
+    NaturalLanguageQueryResponse,
+    ConversationListResponse,
+    ConversationDetailResponse,
+)
+from .service import (
+    execute_query,
+    execute_natural_language_query,
+    list_conversations,
+    get_conversation_detail,
+)
 
 router = APIRouter(prefix="/api/databases", tags=["Queries"])
 
@@ -38,3 +50,27 @@ async def query_natural_language(
     - MySQL & PostgreSQL: Converts to SQL
     """
     return await execute_natural_language_query(str(current_user.id), database_id, body, db)
+
+
+@router.get("/{database_id}/conversations", response_model=ConversationListResponse)
+async def get_conversations(
+    database_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ConversationListResponse:
+    """List this database's conversations, most recently active first."""
+    return await list_conversations(str(current_user.id), database_id, db)
+
+
+@router.get(
+    "/{database_id}/conversations/{conversation_id}",
+    response_model=ConversationDetailResponse,
+)
+async def get_conversation(
+    database_id: str,
+    conversation_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ConversationDetailResponse:
+    """Return a single conversation with its full message history."""
+    return await get_conversation_detail(str(current_user.id), database_id, conversation_id, db)
