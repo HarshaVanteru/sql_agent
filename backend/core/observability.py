@@ -29,6 +29,30 @@ def _console_enabled() -> bool:
     return os.getenv("LOGFIRE_CONSOLE", "true").strip().lower() not in _FALSEY
 
 
+def _patch_otel_route_details() -> None:
+    """Work around open-telemetry/opentelemetry-python-contrib#4732.
+
+    FastAPI >= 0.137 puts `_IncludedRouter` objects in `app.routes`, and those have
+    no `.path`. Naming a span, the instrumentor reads `.path` off whichever route
+    matched: it guards that with a try/except when the match is full, but not when
+    it is partial -- right path, wrong method. So a CORS preflight, or any
+    wrong-method request, raised AttributeError and returned 500 instead of its
+    405. Falling back to the request path is what the instrumentor's own full-match
+    branch does. Once the fix is released this becomes a no-op and can be deleted.
+    """
+    from opentelemetry.instrumentation import fastapi as otel_fastapi
+
+    original = otel_fastapi._get_route_details
+
+    def _get_route_details(scope):
+        try:
+            return original(scope)
+        except AttributeError:
+            return scope.get("path")
+
+    otel_fastapi._get_route_details = _get_route_details
+
+
 def configure_observability() -> None:
     """Configure Logfire and instrument the libraries we use.
 
@@ -37,6 +61,8 @@ def configure_observability() -> None:
     only reaches engines built after it is installed, and a second call would be
     ignored with a warning.
     """
+    _patch_otel_route_details()
+
     # A Windows console is cp1252, and model output routinely contains characters
     # it cannot encode (narrow no-break spaces, em dashes). Without this, logging
     # such a line raises UnicodeEncodeError instead of printing it. stderr rather
