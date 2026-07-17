@@ -1,3 +1,5 @@
+import os
+
 import logfire
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +22,22 @@ app = FastAPI()
 
 logfire.instrument_fastapi(app)
 
+# Explicit origins, not "*". The CORS spec forbids pairing a wildcard with
+# credentials, so Starlette resolves that combination by echoing back whichever
+# Origin asked -- which is every origin, exactly what the wildcard looked like it
+# was avoiding. The default is the Vite dev server; set CORS_ORIGINS (comma
+# separated) for anywhere else.
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

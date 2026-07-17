@@ -6,7 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.deps import get_current_user, get_db
+from backend.auth.deps import get_current_user
+from backend.core.db import get_db
 from backend.auth.models import User
 from ..schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseListResponse, DatabaseDetailResponse

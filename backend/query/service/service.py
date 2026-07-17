@@ -15,8 +15,8 @@ from backend.database.models import Database
 from backend.query.agent.loop import run_agent
 from backend.query.guard import guard_query
 from backend.query.models import Conversation, Message
-from backend.query.databases.mysql import create_mysql_connection, execute_mysql_query
-from backend.query.databases.postgres import create_postgres_connection, execute_postgres_query
+# Imported as a module: this package also defines execute_query.
+from backend.query.databases import connections
 from ..schemas import (
     QueryRequest,
     QueryResponse,
@@ -148,19 +148,11 @@ async def execute_query(user_id: str, database_id: str, body: QueryRequest, db: 
 
     password = _credential_password(creds)
 
-    if db_type == "mysql":
-        engine = create_mysql_connection(creds.host, creds.port, creds.username, password, creds.database_name)
-        result_data = await run_in_threadpool(execute_mysql_query, engine, body.query)
-
-    elif db_type == "postgresql":
-        engine = create_postgres_connection(creds.host, creds.port, creds.username, password, creds.database_name)
-        result_data = await run_in_threadpool(execute_postgres_query, engine, body.query)
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "UNSUPPORTED_DB", "message": f"Database type '{database.db_type}' is not supported"},
-        )
+    # Raises UNSUPPORTED_DB for a type we cannot connect to, as before.
+    engine = connections.create_connection(
+        database.db_type, creds.host, creds.port, creds.username, password, creds.database_name
+    )
+    result_data = await run_in_threadpool(connections.execute_query, engine, body.query)
 
     return QueryResponse(
         columns=result_data["columns"],
@@ -206,15 +198,9 @@ async def execute_natural_language_query(
 
     password = _credential_password(creds)
 
-    if db_type == "mysql":
-        engine = create_mysql_connection(creds.host, creds.port, creds.username, password, creds.database_name)
-    elif db_type == "postgresql":
-        engine = create_postgres_connection(creds.host, creds.port, creds.username, password, creds.database_name)
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "UNSUPPORTED_DB", "message": f"Database type '{database.db_type}' is not supported"},
-        )
+    engine = connections.create_connection(
+        database.db_type, creds.host, creds.port, creds.username, password, creds.database_name
+    )
 
     conversation = None
     history = []

@@ -62,6 +62,18 @@ _THREE_PART = re.compile(
 )
 
 
+def _is_escape_string(query: str, quote_index: int) -> bool:
+    """Is the literal opening at `quote_index` a Postgres E'...' escape string?
+
+    Only E'' honours backslashes on Postgres, and there ``E'a\\''`` really does
+    escape the quote, so the literal must be followed to its true end.
+    """
+    if quote_index == 0 or query[quote_index - 1] not in "eE":
+        return False
+    before = quote_index - 2
+    return before < 0 or not (query[before].isalnum() or query[before] == "_")
+
+
 def _normalize(query: str, dialect: str | None = None) -> str:
     """Blank comments and string literals; unwrap quoted identifiers.
 
@@ -73,7 +85,8 @@ def _normalize(query: str, dialect: str | None = None) -> str:
     In MySQL's default mode a double-quoted span is a string; everywhere else it
     is a quoted identifier.
     """
-    double_is_string = dialect == "mysql"
+    is_mysql = dialect == "mysql"
+    double_is_string = is_mysql
     out: list[str] = []
     i, n = 0, len(query)
 
@@ -83,10 +96,16 @@ def _normalize(query: str, dialect: str | None = None) -> str:
         # String literal -> blank it out entirely.
         if ch == "'" or (ch == '"' and double_is_string):
             quote = ch
+            # Whether a backslash escapes the closing quote, which decides where
+            # this literal ends. MySQL honours backslash escapes; Postgres does
+            # not, except in E'' strings -- standard_conforming_strings has been
+            # on by default since 9.1, so `'a\'` ends at the second quote there.
+            # Assuming otherwise would swallow whatever follows as string
+            # contents, hiding a second statement from every check below.
+            escapes = is_mysql or (quote == "'" and _is_escape_string(query, i))
             i += 1
             while i < n:
-                # MySQL honours backslash escapes inside single-quoted strings.
-                if query[i] == "\\" and quote == "'" and i + 1 < n:
+                if escapes and query[i] == "\\" and i + 1 < n:
                     i += 2
                     continue
                 if query[i] == quote:
