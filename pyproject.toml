@@ -33,4 +33,11 @@ dependencies = [
 dev = [
     "aiosqlite>=0.20.0",  # lets the test suite run the app against SQLite
     "httpx>=0.28.1",      # required by starlette's TestClient
+    "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+# The tests import `backend.*`, which lives at the repo root rather than in an
+# installed package.
+pythonpath = ["."]
+testpaths = ["tests"]

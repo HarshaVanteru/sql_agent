@@ -55,3 +55,6 @@ Thumbs.db
 
 # uv/Pip
 uv.lock
+
+# Logfire project credentials (contains a write token)
+.logfire/

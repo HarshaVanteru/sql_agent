@@ -100,26 +100,28 @@ Endpoints: `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`, 
 
 Logs and traces go through [Pydantic Logfire](https://pydantic.dev/docs/logfire), configured once in `backend/core/observability.py` and called from `main.py` before anything else is imported. FastAPI, SQLAlchemy, and HTTPX are instrumented, so requests, the SQL the agent runs, and the calls out to Groq all show up as spans on the same trace as the question that caused them.
 
-Nothing is required to run the app: without a token it prints to the console and sends nothing (`send_to_logfire="if-token-present"`). To send traces to Logfire, run `uv run logfire auth` and set in `backend/.env`:
+Nothing is required to run the app: without a token it prints to the console and sends nothing (`send_to_logfire="if-token-present"`). To send traces, authenticate once and create a project - from the repo root, so the credentials land where the app looks:
 
 ```
-LOGFIRE_TOKEN=your-write-token
-LOGFIRE_ENVIRONMENT=dev       # optional, filters projects in the UI
-LOGFIRE_CONSOLE=false         # optional, silences the local console output
+uv run logfire auth
+uv run logfire projects new sql-agent
 ```
 
-The console shows INFO and above, as the old stderr handler did. The DEBUG-level detail that used to go to a rotating `logs/app.log` now goes to Logfire instead - the file log is gone, along with `LOG_DIR`.
+That writes `.logfire/logfire_credentials.json` (gitignored - it holds a write token), and the app picks it up on the next start, printing the project URL. `LOGFIRE_ENVIRONMENT` and `LOGFIRE_CONSOLE=false` are optional; `LOGFIRE_TOKEN` is an alternative to the credentials file and overrides it.
+
+The console shows INFO and above; everything from DEBUG up goes to Logfire. There is no log file - the backend is where the detail lives.
 
 ## Project layout
 
 ```
 backend/
-  core/       config + observability (Logfire)
+  core/       config, db (engine + session), observability (Logfire)
   auth/       models, router, schemas, service, deps, security
   database/   models, router, schemas, service, crypto (connection management)
   query/      models, router, schemas, service, guard, agent/, databases/
   alembic/    migrations
   main.py
+tests/        guard and connection-error tests (pytest)
 frontend/
   src/
     api/        central client (base URL + authed fetch)
@@ -136,6 +138,10 @@ Auth (signup/login/logout, JWT + refresh) and database connection management are
 
 Connected-database credentials are encrypted at rest (`CREDENTIALS_KEY`) and never returned by the API.
 
+Run the tests with `uv run pytest`. They cover the guard (the safety-critical
+part) and the connection-error messages.
+
 Known rough edges:
 - No per-user rate limiting or query timeout yet.
-- No test suite yet.
+- Test coverage stops at the guard and error parsing; the agent, services, and
+  routers are not covered.
