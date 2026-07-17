@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.deps import get_current_user, get_db
 from backend.auth.models import User
-from .schemas import (
+from ..schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseListResponse, DatabaseDetailResponse
 )
-from .service import (
+from ..service import (
     create_database, get_databases, get_database_detail, delete_database
 )
 

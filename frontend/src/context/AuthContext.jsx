@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { apiFetch, toError } from '../api/client'
 
 const AuthContext = createContext(null)
 
@@ -15,9 +16,7 @@ export const AuthProvider = ({ children }) => {
       if (storedToken) {
         try {
           // Verify token is still valid
-          const response = await fetch('http://localhost:8000/auth/me', {
-            headers: { Authorization: `Bearer ${storedToken}` }
-          })
+          const response = await apiFetch('/auth/me', { token: storedToken })
 
           if (response.ok) {
             const data = await response.json()
@@ -47,21 +46,17 @@ export const AuthProvider = ({ children }) => {
   const signup = async (email, password, firstName, lastName) => {
     setError(null)
     try {
-      const response = await fetch('http://localhost:8000/auth/signup', {
+      const response = await apiFetch('/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           email,
           password,
           first_name: firstName,
           last_name: lastName,
-        }),
+        },
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Signup failed')
-      }
+      if (!response.ok) throw await toError(response, 'Signup failed')
 
       const data = await response.json()
       return { success: true, userId: data.user_id, message: data.message }
@@ -74,16 +69,12 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setError(null)
     try {
-      const response = await fetch('http://localhost:8000/auth/login', {
+      const response = await apiFetch('/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: { email, password },
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Login failed')
-      }
+      if (!response.ok) throw await toError(response, 'Login failed')
 
       const data = await response.json()
       localStorage.setItem('auth_token', data.access_token)
@@ -105,16 +96,12 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/auth/refresh', {
+      const response = await apiFetch('/auth/refresh', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        body: { refresh_token: refreshToken },
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Token refresh failed')
-      }
+      if (!response.ok) throw await toError(response, 'Token refresh failed')
 
       const data = await response.json()
       localStorage.setItem('auth_token', data.access_token)
@@ -143,13 +130,10 @@ export const AuthProvider = ({ children }) => {
 
     if (storedToken) {
       try {
-        await fetch('http://localhost:8000/auth/logout', {
+        await apiFetch('/auth/logout', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}`,
-          },
-          body: JSON.stringify({ refresh_token: storedRefresh }),
+          token: storedToken,
+          body: { refresh_token: storedRefresh },
         })
       } catch {
         // Already signed out locally; nothing useful to surface.

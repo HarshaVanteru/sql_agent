@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.deps import get_current_user, get_db
 from backend.auth.models import User
-from .schemas import (
+from ..schemas import (
     QueryRequest,
     QueryResponse,
     NaturalLanguageQueryRequest,
@@ -16,7 +16,7 @@ from .schemas import (
     ConversationListResponse,
     ConversationDetailResponse,
 )
-from .service import (
+from ..service import (
     execute_query,
     execute_natural_language_query,
     list_conversations,

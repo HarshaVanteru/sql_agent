@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import JWTError, jwt
 
-import backend.config  # noqa: F401  -- loads backend/.env before SECRET_KEY is read
+import backend.core.config  # noqa: F401  -- loads backend/.env before SECRET_KEY is read
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"

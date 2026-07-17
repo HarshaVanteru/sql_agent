@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useApi } from '../api/useApi'
 
 export default function AddDatabaseModal({ onClose, onAdded }) {
-  const { token } = useAuth()
+  const api = useApi()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -29,29 +29,17 @@ export default function AddDatabaseModal({ onClose, onAdded }) {
     setLoading(true)
 
     try {
-      const response = await fetch('http://localhost:8000/api/databases', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      await api.post('/api/databases', {
+        name: formData.name,
+        db_type: formData.db_type,
+        credentials: {
+          host: formData.host,
+          port: formData.port,
+          username: formData.username,
+          password: formData.password,
+          database_name: formData.database_name,
         },
-        body: JSON.stringify({
-          name: formData.name,
-          db_type: formData.db_type,
-          credentials: {
-            host: formData.host,
-            port: formData.port,
-            username: formData.username,
-            password: formData.password,
-            database_name: formData.database_name,
-          },
-        }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Failed to add database')
-      }
 
       onAdded()
     } catch (err) {

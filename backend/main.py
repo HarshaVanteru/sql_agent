@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.auth.router import router as auth_router
 from backend.database.router import router as database_router
 from backend.query.router import router as query_router
-from backend.logging_config import setup_logging
+from backend.core.logging_config import setup_logging
 
 # Initialize logging
 setup_logging()

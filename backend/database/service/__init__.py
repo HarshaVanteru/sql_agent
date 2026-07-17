@@ -11,7 +11,7 @@ from backend.database.crypto import encrypt
 from backend.database.models import Database, DatabaseCredential
 from backend.query.databases.mysql import create_mysql_connection
 from backend.query.databases.postgres import create_postgres_connection
-from .schemas import (
+from ..schemas import (
     DatabaseCreateRequest, DatabaseResponse, DatabaseDetailResponse,
     DatabaseCredentialOut
 )

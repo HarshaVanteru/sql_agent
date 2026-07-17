@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useApi } from '../api/useApi'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -21,33 +22,18 @@ export default function ConversationSidebar({
   onSelectConversation,
   onNewConversation,
 }) {
-  const { token, refreshAccessToken, logout } = useAuth()
+  const { token } = useAuth()
+  const api = useApi()
   const [conversations, setConversations] = useState([])
   const [loading, setLoading] = useState(false)
 
-  const fetchConversations = async (currentToken = token) => {
-    if (!selectedDb || !currentToken) return
+  const fetchConversations = async () => {
+    if (!selectedDb || !token) return
 
     setLoading(true)
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/databases/${selectedDb.id}/conversations`,
-        { headers: { Authorization: `Bearer ${currentToken}` } },
-      )
-
-      if (response.status === 401) {
-        const refreshResult = await refreshAccessToken()
-        if (refreshResult.success) {
-          return fetchConversations(localStorage.getItem('auth_token'))
-        }
-        logout()
-        return
-      }
-
-      if (response.ok) {
-        const data = await response.json()
-        setConversations(data.conversations || [])
-      }
+      const data = await api.get(`/api/databases/${selectedDb.id}/conversations`)
+      setConversations(data.conversations || [])
     } catch (error) {
       console.error('Failed to fetch conversations:', error)
     } finally {

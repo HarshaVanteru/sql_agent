@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-import backend.config  # noqa: F401  -- loads backend/.env before DATABASE_URL is read
+import backend.core.config  # noqa: F401  -- loads backend/.env before DATABASE_URL is read
 from backend.auth.models import User
 from backend.auth.security import decode_access_token
 

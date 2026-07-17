@@ -11,7 +11,7 @@ from alembic import context
 # Add parent directory to path to import backend modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import backend.config  # noqa: F401  -- loads backend/.env so DATABASE_URL is set
+import backend.core.config  # noqa: F401  -- loads backend/.env so DATABASE_URL is set
 from backend.auth.models import Base
 
 # Imported for their side effect: every model must be registered on Base.metadata

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useApi } from '../api/useApi'
 
 export default function QueryInterface({
   selectedDb,
@@ -8,7 +9,8 @@ export default function QueryInterface({
   onTurnComplete,
   onLogout,
 }) {
-  const { token, user, refreshAccessToken, logout } = useAuth()
+  const { user } = useAuth()
+  const api = useApi()
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -28,7 +30,7 @@ export default function QueryInterface({
   // request to load a different, past conversation.
   const syncedConvRef = useRef(null)
 
-  const executeQuery = async (query, currentToken, mode = 'natural') => {
+  const executeQuery = async (query, mode = 'natural') => {
     const endpoint = mode === 'direct' ? 'query' : 'natural-query'
 
     // Natural language turns carry the conversation so follow-ups like
@@ -38,39 +40,7 @@ export default function QueryInterface({
         ? { query }
         : { question: query, conversation_id: conversationId }
 
-    const response = await fetch(`http://localhost:8000/api/databases/${selectedDb.id}/${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${currentToken}`,
-      },
-      body: JSON.stringify(body),
-    })
-
-    if (response.status === 401) {
-      // Token expired, try to refresh
-      const refreshResult = await refreshAccessToken()
-      if (refreshResult.success) {
-        // Retry with new token
-        return executeQuery(query, localStorage.getItem('auth_token'), mode)
-      } else {
-        logout()
-        throw new Error('Session expired. Please log in again.')
-      }
-    }
-
-    if (response.status === 429) {
-      // Rate limited
-      const errorData = await response.json()
-      throw new Error(errorData.detail?.message || 'Too many requests. Please try again later.')
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail?.message || 'Query execution failed')
-    }
-
-    return response.json()
+    return api.post(`/api/databases/${selectedDb.id}/${endpoint}`, body)
   }
 
   const greetingMessage = (db) => ({
@@ -94,29 +64,12 @@ export default function QueryInterface({
           row_count: m.result?.row_count || 0,
         }
 
-  const loadConversation = async (convId, currentToken = token) => {
+  const loadConversation = async (convId) => {
     setLoading(true)
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/databases/${selectedDb.id}/conversations/${convId}`,
-        { headers: { Authorization: `Bearer ${currentToken}` } },
+      const data = await api.get(
+        `/api/databases/${selectedDb.id}/conversations/${convId}`,
       )
-
-      if (response.status === 401) {
-        const refreshResult = await refreshAccessToken()
-        if (refreshResult.success) {
-          return loadConversation(convId, localStorage.getItem('auth_token'))
-        }
-        logout()
-        throw new Error('Session expired. Please log in again.')
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail?.message || 'Failed to load conversation')
-      }
-
-      const data = await response.json()
       setMessages([greetingMessage(selectedDb), ...data.messages.map(storedToDisplay)])
       setConversationId(convId)
       syncedConvRef.current = convId
@@ -186,7 +139,7 @@ export default function QueryInterface({
     setLoading(true)
 
     try {
-      const data = await executeQuery(input, token, queryMode)
+      const data = await executeQuery(input, queryMode)
 
       if (data.conversation_id) {
         setConversationId(data.conversation_id)

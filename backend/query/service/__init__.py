@@ -17,7 +17,7 @@ from backend.query.guard import guard_query
 from backend.query.models import Conversation, Message
 from backend.query.databases.mysql import create_mysql_connection, execute_mysql_query
 from backend.query.databases.postgres import create_postgres_connection, execute_postgres_query
-from .schemas import (
+from ..schemas import (
     QueryRequest,
     QueryResponse,
     NaturalLanguageQueryRequest,

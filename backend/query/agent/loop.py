@@ -5,7 +5,7 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
 
-import backend.config  # noqa: F401  -- loads backend/.env before GROQ_API_KEY is read
+import backend.core.config  # noqa: F401  -- loads backend/.env before GROQ_API_KEY is read
 from backend.query.agent.prompts import get_agent_prompt
 from backend.query.agent.tools import build_tools
 

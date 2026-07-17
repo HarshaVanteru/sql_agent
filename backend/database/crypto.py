@@ -13,7 +13,7 @@ from functools import lru_cache
 
 from cryptography.fernet import Fernet, InvalidToken
 
-import backend.config  # noqa: F401  -- loads backend/.env before CREDENTIALS_KEY is read
+import backend.core.config  # noqa: F401  -- loads backend/.env before CREDENTIALS_KEY is read
 
 
 @lru_cache

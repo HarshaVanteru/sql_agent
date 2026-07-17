@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useApi } from '../api/useApi'
 import AddDatabaseModal from './AddDatabaseModal'
 
 export default function DatabaseSidebar({ selectedDb, onSelectDb, onRefresh }) {
   const { token } = useAuth()
+  const api = useApi()
   const [databases, setDatabases] = useState([])
   const [loading, setLoading] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -16,17 +18,8 @@ export default function DatabaseSidebar({ selectedDb, onSelectDb, onRefresh }) {
 
     setLoading(true)
     try {
-      const response = await fetch('http://localhost:8000/api/databases', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setDatabases(data.databases || [])
-      }
+      const data = await api.get('/api/databases')
+      setDatabases(data.databases || [])
     } catch (error) {
       console.error('Failed to fetch databases:', error)
     } finally {
@@ -44,32 +37,18 @@ export default function DatabaseSidebar({ selectedDb, onSelectDb, onRefresh }) {
   }
 
   const handleDelete = async (dbId, dbName) => {
-    if (!token) return
-
     setDeleting(true)
     setError(null)
     try {
-      const response = await fetch(`http://localhost:8000/api/databases/${dbId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (response.ok) {
-        setDeleteConfirm(null)
-        if (selectedDb?.id === dbId) {
-          onSelectDb(null)
-        }
-        fetchDatabases()
-      } else {
-        const data = await response.json()
-        setError(data.detail?.message || 'Failed to delete database')
+      await api.del(`/api/databases/${dbId}`)
+      setDeleteConfirm(null)
+      if (selectedDb?.id === dbId) {
+        onSelectDb(null)
       }
+      fetchDatabases()
     } catch (error) {
       console.error('Failed to delete database:', error)
-      setError('Failed to delete database')
+      setError(error.message || 'Failed to delete database')
     } finally {
       setDeleting(false)
     }
