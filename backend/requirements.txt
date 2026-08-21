@@ -18,3 +18,4 @@ langsmith
 logfire
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-sqlalchemy
+opentelemetry-instrumentation-httpx
