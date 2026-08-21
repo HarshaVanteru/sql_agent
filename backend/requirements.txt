@@ -1,0 +1,19 @@
+# Runtime dependencies for the SQL Agent backend
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiomysql
+pymysql
+psycopg2-binary
+alembic
+python-dotenv
+cryptography
+python-jose[cryptography]
+bcrypt
+email-validator
+pydantic
+langchain-core
+langchain-groq
+langsmith
+logfire
+opentelemetry-instrumentation-fastapi

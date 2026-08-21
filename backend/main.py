@@ -20,6 +20,12 @@ log_tracing_status()
 
 app = FastAPI()
 
+
+@app.get("/health", tags=["Health"])
+async def health() -> dict[str, str]:
+    """Lightweight health check for the cloud platform."""
+    return {"status": "ok"}
+
 logfire.instrument_fastapi(app)
 
 # Explicit origins, not "*". The CORS spec forbids pairing a wildcard with
@@ -30,7 +36,7 @@ logfire.instrument_fastapi(app)
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
     ).split(",")
     if origin.strip()
 ]

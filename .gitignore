@@ -10,6 +10,7 @@ wheels/
 
 # Virtual environments
 .venv
+.env
 env/
 venv/
 
@@ -58,3 +59,5 @@ uv.lock
 
 # Logfire project credentials (contains a write token)
 .logfire/
+backend.zip
+
