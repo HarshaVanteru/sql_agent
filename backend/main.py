@@ -33,21 +33,14 @@ logfire.instrument_fastapi(app)
 # Origin asked -- which is every origin, exactly what the wildcard looked like it
 # was avoiding. The default is the Vite dev server; set CORS_ORIGINS (comma
 # separated) for anywhere else.
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-    ).split(",")
-    if origin.strip()
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=[
+        "https://sql-agent-lake.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 app.include_router(auth_router)
