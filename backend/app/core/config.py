@@ -84,6 +84,29 @@ class Settings(BaseSettings):
     MAX_HISTORY_MESSAGES: int = 20
     ENGINE_CACHE_SIZE: int = 20
 
+    @field_validator("GROQ_API_KEY", "SECRET_KEY")
+    @classmethod
+    def _not_a_placeholder(cls, value: str, info) -> str:
+        """Refuse the example values, which otherwise boot happily and fail later.
+
+        CREDENTIALS_KEY was already checked here; these two were not, so a .env
+        copied from .env.example and half filled in started cleanly and then
+        failed at the first question with a 401 from Groq -- a long way from
+        the line that actually needed editing.
+        """
+        placeholders = {"your-groq-api-key", "change-me-to-a-long-random-string", "your-fernet-key"}
+        if value.strip().lower() in placeholders or not value.strip():
+            raise ValueError(
+                f"{info.field_name} is still the placeholder from .env.example. "
+                + (
+                    "Get a key from https://console.groq.com/keys -- it starts with 'gsk_'. "
+                    "(Grok from xAI is a different product; its keys will not work here.)"
+                    if info.field_name == "GROQ_API_KEY"
+                    else 'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+                )
+            )
+        return value
+
     @field_validator("CREDENTIALS_KEY")
     @classmethod
     def _usable_fernet_key(cls, value: str) -> str:

@@ -51,8 +51,15 @@ def _trace_inputs(inputs: dict) -> dict:
     }
 
 
-def _trace_outputs(output: dict) -> dict:
-    """Summarise the result for the trace, dropping the (potentially large) rows."""
+def _trace_outputs(output: dict | None) -> dict:
+    """Summarise the result for the trace, dropping the (potentially large) rows.
+
+    `output` is None when the run raised rather than returned, and LangSmith
+    calls this either way -- which is where "process_outputs failed for run
+    None" came from on every failed question.
+    """
+    if not output:
+        return {}
     result = output.get("result") or {}
     return {
         "valid": output.get("valid"),

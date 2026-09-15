@@ -54,11 +54,13 @@ def _patch_otel_route_details() -> None:
 
 
 # Attributes we set ourselves, from values that cannot be secret: an HTTP
-# method, a route path, an exception class name. They are allowed past the
+# method, a route path, an exception class name, a hint we wrote by hand. They are allowed past the
 # scrubber because its matching is on values, and half this app's routes have
 # the word "session" in them -- which turned every log line naming one into
 # "POST [Scrubbed due to \'session\']".
-_SAFE_ATTRIBUTES = frozenset({"method", "path", "route", "error_type", "status_code"})
+_SAFE_ATTRIBUTES = frozenset(
+    {"method", "path", "route", "error_type", "status_code", "hint", "code"}
+)
 
 
 def _keep_safe_attributes(match):

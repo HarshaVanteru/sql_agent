@@ -14,6 +14,7 @@ from redis.asyncio import Redis
 
 from app.connections import service as connections_service
 from app.core.config import settings
+from app.query.agent.errors import classify as classify_model_failure
 from app.query.agent.loop import run_agent
 # Imported as a module: this package also defines a create_connection.
 from app.query.databases import connections as target_db
@@ -134,10 +135,18 @@ async def ask(
             database_name=record["database_name"],
         )
     except Exception as e:
-        logfire.exception("Natural language query failed: {error}", error=str(e))
+        # Never f-string the provider's exception into the reply: its str() is
+        # the raw JSON body it sent us, which belongs in the log and nowhere
+        # near a chat bubble.
+        failure = classify_model_failure(e)
+        logfire.exception(
+            "Agent failed ({error_type}): {hint}",
+            error_type=type(e).__name__,
+            hint=failure.operator_hint,
+        )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "QUERY_ERROR", "message": f"Query processing failed: {str(e)}"},
+            status_code=failure.status_code,
+            detail={"code": failure.code, "message": failure.message},
         )
 
     if not agent_result.get("valid") or agent_result.get("error"):
