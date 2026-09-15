@@ -13,6 +13,7 @@ import logfire
 from fastapi import HTTPException, status
 from sqlalchemy import text
 
+from app.core.config import settings
 from app.query.databases.engines import get_engine
 
 
@@ -20,11 +21,35 @@ from app.query.databases.engines import get_engine
 class _Dialect:
     label: str  # what a user should see: "MySQL", not "mysql+pymysql"
     driver: str
+    # Passed to the driver. Every entry is a deadline: these are databases we
+    # do not run, reached over a network we do not control, and a request with
+    # no ceiling on it holds a threadpool worker until the far end decides it
+    # is finished.
+    connect_args: dict
 
 
 _DIALECTS: dict[str, _Dialect] = {
-    "mysql": _Dialect(label="MySQL", driver="mysql+pymysql"),
-    "postgresql": _Dialect(label="PostgreSQL", driver="postgresql+psycopg2"),
+    "mysql": _Dialect(
+        label="MySQL",
+        driver="mysql+pymysql",
+        connect_args={
+            "connect_timeout": settings.DB_CONNECT_TIMEOUT,
+            # MySQL has no per-session statement timeout we can set here, so
+            # the read deadline is what bounds a long query.
+            "read_timeout": settings.DB_STATEMENT_TIMEOUT,
+            "write_timeout": settings.DB_STATEMENT_TIMEOUT,
+        },
+    ),
+    "postgresql": _Dialect(
+        label="PostgreSQL",
+        driver="postgresql+psycopg2",
+        connect_args={
+            "connect_timeout": settings.DB_CONNECT_TIMEOUT,
+            # Postgres will cancel the query itself at this point, which is
+            # better than us walking away and leaving it running.
+            "options": f"-c statement_timeout={settings.DB_STATEMENT_TIMEOUT * 1000}",
+        },
+    ),
 }
 
 SUPPORTED_DB_TYPES = frozenset(_DIALECTS)
@@ -115,7 +140,7 @@ def create_connection(
             port=port,
             database_name=database_name,
         )
-        return get_engine(db_url)
+        return get_engine(db_url, dialect.connect_args)
     except Exception as e:
         logfire.exception(
             "Failed to create {label} connection: {error}", label=dialect.label, error=str(e)

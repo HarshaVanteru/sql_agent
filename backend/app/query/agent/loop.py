@@ -12,7 +12,15 @@ from app.query.agent.tools import build_tools
 # never returns, and every round is an LLM call the user waits on.
 MAX_ITERATIONS = settings.AGENT_MAX_ITERATIONS
 
-llm = ChatGroq(model=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY, temperature=0)
+llm = ChatGroq(
+    model=settings.GROQ_MODEL,
+    api_key=settings.GROQ_API_KEY,
+    temperature=0,
+    # A model call that never returns would hold its threadpool worker open for
+    # as long as the socket lives, and the agent makes several per question.
+    timeout=settings.AGENT_LLM_TIMEOUT,
+    max_retries=settings.AGENT_LLM_RETRIES,
+)
 
 _EMPTY_RESULT = {"columns": [], "rows": []}
 

@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     # ─── Redis: the only datastore ───────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Seconds to wait on Redis. Short on purpose: it is on the same network as
+    # the app, so slow means broken, and a request waiting on it is a person
+    # watching a spinner.
+    REDIS_CONNECT_TIMEOUT: float = 2.0
+    REDIS_TIMEOUT: float = 3.0
+    # Retries per command, over an exponential backoff, before giving up.
+    REDIS_RETRIES: int = 2
+
     # ─── Sessions ────────────────────────────────────────────────────────────
     # 24 hours, fixed from creation rather than sliding: a session is a visit,
     # and a visit has a length.
@@ -61,6 +69,16 @@ class Settings(BaseSettings):
 
     # ─── Agent ───────────────────────────────────────────────────────────────
     AGENT_MAX_ITERATIONS: int = 8
+    # Seconds to wait on one model call, and how many times to retry a failed
+    # one. A hung call would otherwise hold a threadpool worker for as long as
+    # the socket stays open, and there are only so many workers.
+    AGENT_LLM_TIMEOUT: float = 60.0
+    AGENT_LLM_RETRIES: int = 2
+    # Seconds to wait when opening a connection to someone's database, and the
+    # ceiling on one query. Without the second, a careless GROUP BY on a large
+    # table holds a worker until the database decides it is done.
+    DB_CONNECT_TIMEOUT: int = 10
+    DB_STATEMENT_TIMEOUT: int = 30
     AGENT_MAX_ROWS: int = 1_000
     AGENT_ROW_SAMPLE: int = 20
     MAX_HISTORY_MESSAGES: int = 20

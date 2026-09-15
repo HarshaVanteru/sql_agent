@@ -31,6 +31,19 @@ export class ApiError extends Error {
   get isSessionExpired(): boolean {
     return this.status === 401 || this.code === 'NO_SESSION';
   }
+
+  /**
+   * The backend is up but cannot serve right now -- its session store is
+   * unreachable, or it fell over on its own.
+   *
+   * Distinct from an expired session on purpose. Both fail the same calls, but
+   * one means "start again" and the other means "wait a moment and retry", and
+   * sending someone to the start screen during an outage just moves them to a
+   * page where starting also fails.
+   */
+  get isTemporary(): boolean {
+    return this.status === 503 || this.status === 0 || this.code === 'NETWORK_ERROR';
+  }
 }
 
 export function isApiError(error: unknown): error is ApiError {

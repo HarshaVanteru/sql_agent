@@ -56,8 +56,15 @@ async def health() -> dict[str, str]:
     try:
         await app.state.redis.ping()
     except Exception as e:
-        logfire.warning("Health check could not reach Redis: {error}", error=str(e))
-        return {"status": "degraded", "redis": "unreachable"}
+        # The type is the useful half and the only half that reliably survives
+        # scrubbing: ConnectionError means it is down, AuthenticationError
+        # means REDIS_URL is missing a password.
+        logfire.warning(
+            "Health check could not reach Redis ({error_type}): {error}",
+            error_type=type(e).__name__,
+            error=str(e),
+        )
+        return {"status": "degraded", "redis": type(e).__name__}
     return {"status": "ok", "redis": "ok"}
 
 

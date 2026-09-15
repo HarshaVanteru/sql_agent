@@ -53,6 +53,23 @@ def _patch_otel_route_details() -> None:
     otel_fastapi._get_route_details = _get_route_details
 
 
+# Attributes we set ourselves, from values that cannot be secret: an HTTP
+# method, a route path, an exception class name. They are allowed past the
+# scrubber because its matching is on values, and half this app's routes have
+# the word "session" in them -- which turned every log line naming one into
+# "POST [Scrubbed due to \'session\']".
+_SAFE_ATTRIBUTES = frozenset({"method", "path", "route", "error_type", "status_code"})
+
+
+def _keep_safe_attributes(match):
+    """Let our own diagnostics through; scrub everything else as normal.
+
+    Deliberately narrow. Exception *messages* stay scrubbed: a driver error can
+    carry a connection string, and no allowlist can tell which one will.
+    """
+    return match.value if match.path[-1:] and match.path[-1] in _SAFE_ATTRIBUTES else None
+
+
 def configure_observability() -> None:
     """Configure Logfire and instrument the libraries we use.
 
@@ -73,6 +90,7 @@ def configure_observability() -> None:
 
     logfire.configure(
         service_name="sql-agent",
+        scrubbing=logfire.ScrubbingOptions(callback=_keep_safe_attributes),
         # No token means nowhere to send telemetry. Without this the app would
         # refuse to start unconfigured; instead it runs with console output only,
         # which is what local development and the test suite want.

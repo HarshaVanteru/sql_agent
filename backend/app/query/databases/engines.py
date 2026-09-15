@@ -23,8 +23,12 @@ _engines: "OrderedDict[str, Engine]" = OrderedDict()
 _lock = Lock()
 
 
-def get_engine(url: str) -> Engine:
-    """Return a pooled Engine for `url`, creating it on first use."""
+def get_engine(url: str, connect_args: dict | None = None) -> Engine:
+    """Return a pooled Engine for `url`, creating it on first use.
+
+    Keyed on the URL alone: `connect_args` comes from the dialect, so the same
+    URL always asks for the same ones.
+    """
     with _lock:
         engine = _engines.get(url)
         if engine is not None:
@@ -33,7 +37,15 @@ def get_engine(url: str) -> Engine:
 
         # pool_pre_ping: a cached pool outlives the server's idle timeout, so
         # connections must be checked for liveness before being handed out.
-        engine = create_engine(url, echo=False, pool_pre_ping=True)
+        # pool_recycle: and a connection the far end quietly dropped hours ago
+        # should be replaced rather than pinged forever.
+        engine = create_engine(
+            url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_recycle=1800,
+            connect_args=connect_args or {},
+        )
         _engines[url] = engine
 
         while len(_engines) > ENGINE_CACHE_SIZE:

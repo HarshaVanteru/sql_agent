@@ -27,7 +27,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   navigateRef.current = navigate;
 
   const handleExpiry = useCallback((error: unknown, client: QueryClient) => {
-    if (!isApiError(error) || !error.isSessionExpired) return;
+    if (!isApiError(error) || !error.isSessionExpired || error.isTemporary) return;
     // Nothing from the old session should survive for the next visitor.
     client.clear();
     navigateRef.current('/', { replace: true, state: { sessionExpired: true } });
