@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { ConnectionDialog } from '@/components/connections/ConnectionDialog';
 import { ConnectionList } from '@/components/connections/ConnectionList';
 import { ConversationList } from '@/components/conversations/ConversationList';
+import { NewConversationButton } from '@/components/conversations/NewConversationButton';
 import { PlusIcon } from '@/components/icons/PlusIcon';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppSidebar } from '@/components/layout/AppSidebar';
@@ -52,6 +53,27 @@ export function WorkspacePage() {
     [list, connectionId],
   );
 
+  // Picking a database reopens where that database was left off.
+  //
+  // Selecting a connection cannot carry a conversation with it -- the old one
+  // belonged to a different database -- so the id is cleared and the most
+  // recent conversation is restored once the list arrives. Once per selection,
+  // tracked here, or "New conversation" would be undone the instant it was
+  // pressed. A conversation already named in the URL is left alone: that is a
+  // deep link, and it is more specific than "the latest".
+  const resumedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!connectionId) {
+      resumedFor.current = null;
+      return;
+    }
+    if (resumedFor.current === connectionId || !conversations.isSuccess) return;
+    resumedFor.current = connectionId;
+
+    const mostRecent = conversations.data?.[0];
+    if (mostRecent && !conversationId) selectConversation(mostRecent.id);
+  }, [connectionId, conversationId, conversations.isSuccess, conversations.data, selectConversation]);
+
   // A connection id in the URL that no longer exists (deleted, or from an
   // expired session) would otherwise leave the panel pointing at nothing.
   // Never while a fetch is in flight: mid-refetch the list is not yet the
@@ -87,12 +109,26 @@ export function WorkspacePage() {
               loading={connections.isPending}
               selectedId={connectionId}
               deletingId={deleteConnection.isPending ? deleteConnection.variables : null}
-              onSelect={selectConnection}
+              onSelect={(id) => {
+                // Re-clicking the open database would otherwise clear the
+                // conversation and bounce through the empty state.
+                if (id !== connectionId) selectConnection(id);
+              }}
               onDelete={(id) => deleteConnection.mutate(id)}
             />
           </SidebarSection>
 
-          <SidebarSection title="History">
+          <SidebarSection
+            title="History"
+            action={
+              selected ? (
+                <NewConversationButton
+                  onClick={() => selectConversation(null)}
+                  disabled={!conversationId}
+                />
+              ) : null
+            }
+          >
             {selected ? (
               <ConversationList
                 conversations={conversations.data ?? []}

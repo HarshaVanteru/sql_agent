@@ -28,8 +28,14 @@ export function ResultTable({ result }: ResultTableProps) {
   const numericColumns = new Set(result.columns.filter((column) => isNumeric(firstRow[column])));
 
   return (
-    <div className="max-h-96 overflow-auto rounded border border-rule">
-      <table className="w-full border-collapse text-left font-mono text-[0.8125rem]">
+    // A table sized to its content: a one-column result stretched to the full
+    // width left its heading stranded at one end and the value at the other,
+    // reading as a broken table rather than a small one. Wide results still
+    // fill the space and scroll sideways inside it.
+    // self-start, not inline-block: this sits in a flex column, where a child
+    // stretches to the full width and inline-block is ignored entirely.
+    <div className="max-h-96 max-w-full self-start overflow-auto rounded border border-rule">
+      <table className="w-auto border-collapse text-left font-mono text-[0.8125rem]">
         <thead className="sticky top-0 z-10 bg-surface">
           <tr>
             {result.columns.map((column) => (
