@@ -2,11 +2,13 @@ import { useState } from 'react';
 
 import { FormError } from '@/components/ui';
 import { useAskQuestion } from '@/hooks/useAskQuestion';
+import { useSuggestedQuestions } from '@/hooks/useSuggestedQuestions';
 import { useConversation } from '@/hooks/useConversations';
 import { errorMessage, isApiError } from '@/lib/ApiError';
 import type { Connection } from '@/types';
 import { AskForm } from './AskForm';
 import { ChatEmptyState } from './ChatEmptyState';
+import { FollowUpQuestions } from './FollowUpQuestions';
 import { MessageList } from './MessageList';
 
 interface ChatPanelProps {
@@ -28,6 +30,7 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
   });
 
   const messages = conversation.data?.messages ?? [];
+  const suggestions = useSuggestedQuestions(messages);
   const showEmptyState = !conversationId && !ask.isPending && messages.length === 0;
 
   // A 401 is handled a level up, by sending the visitor back to the start.
@@ -39,6 +42,7 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
       {showEmptyState ? (
         <ChatEmptyState
           connectionName={connection.name}
+          questions={suggestions}
           onPick={setPrefill}
           disabled={ask.isPending}
         />
@@ -47,7 +51,14 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
       )}
 
       <div className="shrink-0 border-t border-rule bg-surface px-4 py-3">
-        <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        <div className="mx-auto flex max-w-3xl flex-col gap-2.5">
+          {messages.length > 0 && !ask.isPending && (
+            <FollowUpQuestions
+              questions={suggestions}
+              onPick={setPrefill}
+              disabled={ask.isPending}
+            />
+          )}
           <FormError message={askError ? errorMessage(askError, 'The question could not be answered.') : null} />
           <AskForm
             onAsk={(question) =>

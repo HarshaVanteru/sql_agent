@@ -2,11 +2,17 @@ import { SuggestedQuestions } from './SuggestedQuestions';
 
 interface ChatEmptyStateProps {
   connectionName: string;
+  questions: readonly string[];
   onPick: (question: string) => void;
   disabled: boolean;
 }
 
-export function ChatEmptyState({ connectionName, onPick, disabled }: ChatEmptyStateProps) {
+export function ChatEmptyState({
+  connectionName,
+  questions,
+  onPick,
+  disabled,
+}: ChatEmptyStateProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 py-10 text-center">
       <div className="max-w-md">
@@ -16,7 +22,7 @@ export function ChatEmptyState({ connectionName, onPick, disabled }: ChatEmptySt
           rows it came back with.
         </p>
       </div>
-      <SuggestedQuestions onPick={onPick} disabled={disabled} />
+      <SuggestedQuestions questions={questions} onPick={onPick} disabled={disabled} />
     </div>
   );
 }
