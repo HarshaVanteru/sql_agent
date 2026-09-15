@@ -3,6 +3,9 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { SendIcon } from '@/components/icons/SendIcon';
 import { cn } from '@/lib/cn';
 
+/** Matches the backend's cap, so a long paste is refused here rather than there. */
+const MAX_QUESTION = 4000;
+
 interface AskFormProps {
   onAsk: (question: string) => void;
   pending: boolean;
@@ -17,7 +20,8 @@ export function AskForm({ onAsk, pending, disabled, prefill }: AskFormProps) {
   const [question, setQuestion] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = question.trim();
-  const canSend = trimmed !== '' && !pending && !disabled;
+  const tooLong = question.length > MAX_QUESTION;
+  const canSend = trimmed !== '' && !tooLong && !pending && !disabled;
 
   useEffect(() => {
     if (prefill) {
@@ -54,36 +58,47 @@ export function AskForm({ onAsk, pending, disabled, prefill }: AskFormProps) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex items-end gap-2 rounded-md border border-rule bg-raised p-2 focus-within:border-signal"
-    >
-      <label htmlFor="question" className="sr-only">
-        Ask a question about this database
-      </label>
-      <textarea
-        id="question"
-        ref={textareaRef}
-        rows={1}
-        value={question}
-        onChange={(event) => setQuestion(event.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        placeholder={disabled ? 'Connect a database first' : 'Ask in plain English'}
-        className="max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-[0.9375rem] leading-relaxed text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed"
-      />
-      <button
-        type="submit"
-        disabled={!canSend}
-        aria-label="Ask"
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-1.5">
+      <div
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors',
-          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
-          canSend ? 'bg-signal text-white hover:bg-signal-hover' : 'bg-paper text-muted',
+          'flex items-end gap-2 rounded-md border bg-raised p-2',
+          tooLong ? 'border-danger' : 'border-rule focus-within:border-signal',
         )}
       >
-        <SendIcon />
-      </button>
+        <label htmlFor="question" className="sr-only">
+          Ask a question about this database
+        </label>
+        <textarea
+          id="question"
+          ref={textareaRef}
+          rows={1}
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          aria-invalid={tooLong ? true : undefined}
+          placeholder={disabled ? 'Connect a database first' : 'Ask in plain English'}
+          className="max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-[0.9375rem] leading-relaxed text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed"
+        />
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label="Ask"
+          className={cn(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
+            canSend ? 'bg-signal text-white hover:bg-signal-hover' : 'bg-paper text-muted',
+          )}
+        >
+          <SendIcon />
+        </button>
+      </div>
+      {tooLong && (
+        <p role="alert" className="text-[0.8125rem] text-danger">
+          That question is {question.length.toLocaleString()} characters. Trim it to{' '}
+          {MAX_QUESTION.toLocaleString()} or fewer.
+        </p>
+      )}
     </form>
   );
 }

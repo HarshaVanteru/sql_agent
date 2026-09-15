@@ -1,91 +1,126 @@
 import type { FormEvent } from 'react';
 
 import { Button, FormError, TextField } from '@/components/ui';
-import { errorMessage } from '@/lib/ApiError';
-import type { ConnectionDraft } from '@/types';
+import { errorMessage, isApiError } from '@/lib/ApiError';
 import { DatabaseTypeField } from './DatabaseTypeField';
+import { SampleConnections } from './SampleConnections';
+import type { SampleConnection } from './sampleConnections';
+import type { useConnectionDraft } from './useConnectionDraft';
+
+type Draft = ReturnType<typeof useConnectionDraft>;
 
 interface ConnectionFormProps {
-  draft: ConnectionDraft;
-  setField: <K extends keyof ConnectionDraft>(key: K, value: ConnectionDraft[K]) => void;
-  setDbType: (dbType: ConnectionDraft['dbType']) => void;
-  complete: boolean;
+  form: Draft;
   pending: boolean;
   error: unknown;
   onSubmit: () => void;
   onCancel: () => void;
 }
 
-export function ConnectionForm({
-  draft,
-  setField,
-  setDbType,
-  complete,
-  pending,
-  error,
-  onSubmit,
-  onCancel,
-}: ConnectionFormProps) {
+/**
+ * A form-level message is for what is wrong with the attempt as a whole -- a
+ * refused login, an unreachable host. Anything the server pinned to a single
+ * field is shown on that field instead, so it is not said twice.
+ */
+function formLevelError(error: unknown): string | null {
+  if (error == null) return null;
+  if (isApiError(error)) {
+    if (error.code === 'VALIDATION_ERROR' || error.code === 'CONNECTION_EXISTS') return null;
+    if (error.isSessionExpired) return null;
+  }
+  return errorMessage(error, 'Could not connect.');
+}
+
+export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: ConnectionFormProps) {
+  const { draft, setField, setDbType, applySample, errorFor, touch, touchAllAndCheck } = form;
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (complete) onSubmit();
+    if (touchAllAndCheck()) onSubmit();
+  }
+
+  function pickSample(sample: SampleConnection) {
+    applySample(sample.draft);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <TextField
-        id="connection-name"
-        label="Name it"
-        value={draft.name}
-        onChange={(event) => setField('name', event.target.value)}
-        placeholder="staging analytics"
-        disabled={pending}
-        maxLength={255}
-      />
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <SampleConnections onPick={pickSample} disabled={pending} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <DatabaseTypeField value={draft.dbType} onChange={setDbType} disabled={pending} />
+      <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
+        <TextField
+          id="connection-name"
+          label="Name"
+          required
+          value={draft.name}
+          onChange={(event) => setField('name', event.target.value)}
+          onBlur={() => touch('name')}
+          error={errorFor('name')}
+          placeholder="staging analytics"
+          disabled={pending}
+          maxLength={255}
+        />
+        <DatabaseTypeField
+          value={draft.dbType}
+          onChange={setDbType}
+          error={errorFor('dbType')}
+          disabled={pending}
+        />
+
+        <TextField
+          id="connection-host"
+          label="Host"
+          required
+          value={draft.host}
+          onChange={(event) => setField('host', event.target.value)}
+          onBlur={() => touch('host')}
+          error={errorFor('host')}
+          placeholder="db.example.com"
+          disabled={pending}
+          autoComplete="off"
+          spellCheck={false}
+        />
         <TextField
           id="connection-port"
           label="Port"
+          required
           type="number"
           inputMode="numeric"
           min={1}
           max={65535}
-          value={draft.port}
-          onChange={(event) => setField('port', Number(event.target.value))}
+          value={Number.isNaN(draft.port) ? '' : draft.port}
+          onChange={(event) => setField('port', event.target.valueAsNumber)}
+          onBlur={() => touch('port')}
+          error={errorFor('port')}
           disabled={pending}
         />
-      </div>
 
-      <TextField
-        id="connection-host"
-        label="Host"
-        value={draft.host}
-        onChange={(event) => setField('host', event.target.value)}
-        placeholder="db.example.com"
-        disabled={pending}
-        autoComplete="off"
-      />
+        <TextField
+          id="connection-database"
+          label="Database"
+          required
+          value={draft.databaseName}
+          onChange={(event) => setField('databaseName', event.target.value)}
+          onBlur={() => touch('databaseName')}
+          error={errorFor('databaseName')}
+          placeholder="analytics"
+          disabled={pending}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="hidden sm:block" aria-hidden="true" />
 
-      <TextField
-        id="connection-database"
-        label="Database"
-        value={draft.databaseName}
-        onChange={(event) => setField('databaseName', event.target.value)}
-        placeholder="analytics"
-        disabled={pending}
-        autoComplete="off"
-      />
-
-      <div className="grid grid-cols-2 gap-3">
         <TextField
           id="connection-username"
           label="User"
+          required
           value={draft.username}
           onChange={(event) => setField('username', event.target.value)}
+          onBlur={() => touch('username')}
+          error={errorFor('username')}
           disabled={pending}
           autoComplete="off"
+          spellCheck={false}
         />
         <TextField
           id="connection-password"
@@ -93,6 +128,8 @@ export function ConnectionForm({
           type="password"
           value={draft.password}
           onChange={(event) => setField('password', event.target.value)}
+          error={errorFor('password')}
+          hint="Leave blank if the database has none"
           disabled={pending}
           autoComplete="new-password"
         />
@@ -103,14 +140,14 @@ export function ConnectionForm({
         writing, but least-privilege credentials are the real safety net.
       </p>
 
-      <FormError message={error == null ? null : errorMessage(error, 'Could not connect.')} />
+      <FormError message={formLevelError(error)} />
 
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" loading={pending} disabled={!complete}>
-          Connect
+        <Button type="submit" loading={pending}>
+          {pending ? 'Connecting' : 'Connect'}
         </Button>
       </div>
     </form>

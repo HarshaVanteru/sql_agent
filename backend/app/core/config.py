@@ -11,6 +11,7 @@ is asking, at runtime.
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/.env, two levels up from this module (backend/app/core/).
@@ -64,6 +65,28 @@ class Settings(BaseSettings):
     AGENT_ROW_SAMPLE: int = 20
     MAX_HISTORY_MESSAGES: int = 20
     ENGINE_CACHE_SIZE: int = 20
+
+    @field_validator("CREDENTIALS_KEY")
+    @classmethod
+    def _usable_fernet_key(cls, value: str) -> str:
+        """Reject a bad key now rather than when someone connects a database.
+
+        Checked here because this is the earliest possible moment: settings load
+        before the server binds a port, so a placeholder copied out of
+        .env.example stops the app at boot with the command that fixes it,
+        instead of surfacing as a 500 midway through a visitor's first connect.
+        """
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(value.encode())
+        except (ValueError, TypeError) as error:
+            raise ValueError(
+                "CREDENTIALS_KEY is not a valid Fernet key. Generate one with:\n"
+                '  python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())"'
+            ) from error
+        return value
 
     @property
     def cors_origins(self) -> list[str]:

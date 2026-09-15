@@ -1,15 +1,31 @@
 """Shapes for the databases a visitor connects."""
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from app.core.validators import Host, RequiredText
+from app.query.databases.connections import SUPPORTED_DB_TYPES
+
+# Constrained at the edge rather than deep in the service: a typo in the engine
+# name is a bad request, and the reply should say which names are real.
+DatabaseType = Annotated[
+    str,
+    Field(
+        description=f"One of: {', '.join(sorted(SUPPORTED_DB_TYPES))}",
+        json_schema_extra={"enum": sorted(SUPPORTED_DB_TYPES)},
+    ),
+]
+
 
 class ConnectionCredentialInput(BaseModel):
-    host: str = Field(min_length=1)
+    host: Host
     port: int = Field(ge=1, le=65535)
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
-    database_name: str = Field(min_length=1)
+    username: RequiredText("User", 255)  # type: ignore[valid-type]
+    # Optional, unlike every other field here: public read-only databases are
+    # commonly published with a username and no password at all.
+    password: str = Field(default="", max_length=1024)
+    database_name: RequiredText("Database", 255)  # type: ignore[valid-type]
 
 
 class ConnectionCredentialOut(BaseModel):
@@ -26,8 +42,8 @@ class ConnectionCredentialOut(BaseModel):
 
 
 class ConnectionCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    db_type: str = Field(min_length=1, max_length=50)
+    name: RequiredText("Name", 255)  # type: ignore[valid-type]
+    db_type: DatabaseType
     credentials: ConnectionCredentialInput
 
 

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
+import { SessionExpiredNotice } from '@/components/session/SessionExpiredNotice';
 import { StartSessionForm } from '@/components/session/StartSessionForm';
 import { useSession } from '@/hooks/useSession';
 import { useStartSession } from '@/hooks/useStartSession';
@@ -16,19 +17,21 @@ const STEPS = [
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: session } = useSession();
+  const expired = (location.state as { sessionExpired?: boolean } | null)?.sessionExpired === true;
   const start = useStartSession((created) =>
     navigate(`/workspace?${PARAM.session}=${encodeURIComponent(created.sessionId)}`),
   );
 
   // Someone arriving with a live session should not have to start another.
   useEffect(() => {
-    if (session) {
+    if (session && !expired) {
       navigate(`/workspace?${PARAM.session}=${encodeURIComponent(session.sessionId)}`, {
         replace: true,
       });
     }
-  }, [session, navigate]);
+  }, [session, expired, navigate]);
 
   return (
     <main className="min-h-dvh bg-paper">
@@ -45,6 +48,7 @@ export function LandingPage() {
         </p>
 
         <div className="mt-10">
+          <SessionExpiredNotice show={expired} />
           <StartSessionForm
             onStart={(name) => start.mutate(name)}
             pending={start.isPending}

@@ -4,9 +4,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.core.validators import RequiredText
+
 
 class NaturalLanguageQueryRequest(BaseModel):
-    question: str = Field(min_length=1)
+    question: RequiredText("Question", 4000)  # type: ignore[valid-type]
     # Absent starts a new conversation; present continues one, which is what
     # lets "now only the ones in London" refine the previous question.
     conversation_id: str | None = None

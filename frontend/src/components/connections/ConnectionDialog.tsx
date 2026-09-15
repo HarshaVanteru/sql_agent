@@ -13,14 +13,16 @@ interface ConnectionDialogProps {
 }
 
 export function ConnectionDialog({ open, onClose, onConnected }: ConnectionDialogProps) {
-  const { draft, setField, setDbType, reset, complete } = useConnectionDraft();
+  const form = useConnectionDraft();
+  const { reset, applyServerError, trimmed } = form;
+
   const create = useCreateConnection((connection) => {
     onConnected(connection);
     onClose();
   });
 
-  // A dialog reopened after a failure should not still be showing the old
-  // error, or the credentials of the last attempt.
+  // A dialog reopened after a failure should not still show the old error, or
+  // the credentials of the last attempt.
   useEffect(() => {
     if (open) {
       reset();
@@ -32,13 +34,14 @@ export function ConnectionDialog({ open, onClose, onConnected }: ConnectionDialo
   return (
     <Modal open={open} title="Connect a database" onClose={onClose}>
       <ConnectionForm
-        draft={draft}
-        setField={setField}
-        setDbType={setDbType}
-        complete={complete}
+        form={form}
         pending={create.isPending}
         error={create.error}
-        onSubmit={() => create.mutate(draft)}
+        onSubmit={() =>
+          create.mutate(trimmed, {
+            onError: applyServerError,
+          })
+        }
         onCancel={onClose}
       />
     </Modal>

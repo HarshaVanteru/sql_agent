@@ -1,9 +1,11 @@
 export { Button } from './Button';
 export { EmptyState } from './EmptyState';
+export { FieldError } from './FieldError';
 export { FieldLabel } from './FieldLabel';
 export { FormError } from './FormError';
 export { IconButton } from './IconButton';
 export { Modal } from './Modal';
+export { RequiredMark } from './RequiredMark';
 export { SelectField } from './SelectField';
 export { Spinner } from './Spinner';
 export { TextField } from './TextField';

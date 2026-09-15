@@ -10,21 +10,23 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-/** Pull a usable message out of whatever shape the error body arrived in. */
+/**
+ * Turn an error body into an ApiError.
+ *
+ * The backend normalises its own validation failures into the same
+ * {code, message, fields} shape as everything else (see app/core/errors.py),
+ * so there is one shape to read here.
+ */
 function readError(status: number, payload: unknown): ApiError {
   const detail = (payload as { detail?: unknown } | null)?.detail;
 
   if (detail && typeof detail === 'object' && 'code' in detail) {
-    const { code, message } = detail as { code: string; message?: string };
-    return new ApiError(status, code, message ?? 'Request failed.');
-  }
-
-  // FastAPI's validation errors arrive as a list of field problems.
-  if (Array.isArray(detail)) {
-    const first = detail[0] as { msg?: string; loc?: unknown[] } | undefined;
-    const field = Array.isArray(first?.loc) ? first.loc.at(-1) : undefined;
-    const reason = first?.msg ?? 'Check the values and try again.';
-    return new ApiError(status, 'VALIDATION_ERROR', field ? `${String(field)}: ${reason}` : reason);
+    const { code, message, fields } = detail as {
+      code: string;
+      message?: string;
+      fields?: Record<string, string>;
+    };
+    return new ApiError(status, code, message ?? 'Request failed.', fields ?? {});
   }
 
   if (typeof detail === 'string') return new ApiError(status, 'ERROR', detail);

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
+from app.core.errors import register_error_handlers
 from app.core.observability import configure_observability
 
 # Before the routers are imported, not after: importing them reaches the engine
@@ -44,6 +45,9 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+
+register_error_handlers(app)
 
 
 @app.get("/health", tags=["Health"])
