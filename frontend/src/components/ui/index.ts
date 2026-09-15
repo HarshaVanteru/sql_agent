@@ -1,6 +1,6 @@
 export { Button } from './Button';
 export { EmptyState } from './EmptyState';
-export { ExpandableText } from './ExpandableText';
+export { Collapsible } from './Collapsible';
 export { FieldError } from './FieldError';
 export { FieldLabel } from './FieldLabel';
 export { controlClasses } from './fieldStyles';

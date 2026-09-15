@@ -24,6 +24,13 @@ export function LandingPage() {
     navigate(`/workspace?${PARAM.session}=${encodeURIComponent(created.sessionId)}`),
   );
 
+  // Fetch the workspace's code while the name is being typed, so pressing
+  // Start goes straight there. It is a separate chunk to keep this page small;
+  // without the prefetch that saving costs a spinner at the worst moment.
+  useEffect(() => {
+    void import('@/pages/WorkspacePage');
+  }, []);
+
   // Someone arriving with a live session should not have to start another.
   useEffect(() => {
     if (session && !expired) {
