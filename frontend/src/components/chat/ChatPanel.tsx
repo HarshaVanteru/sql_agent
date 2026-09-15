@@ -38,7 +38,7 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
     ask.error && !(isApiError(ask.error) && ask.error.isSessionExpired) ? ask.error : null;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-paper">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-paper">
       {showEmptyState ? (
         <ChatEmptyState
           connectionName={connection.name}
@@ -50,8 +50,8 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
         <MessageList messages={messages} thinking={ask.isPending} />
       )}
 
-      <div className="shrink-0 border-t border-rule bg-surface px-4 py-3">
-        <div className="mx-auto flex max-w-3xl flex-col gap-2.5">
+      <div className="shrink-0 border-t border-rule bg-surface px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2.5">
           {messages.length > 0 && !ask.isPending && (
             <FollowUpQuestions
               questions={suggestions}

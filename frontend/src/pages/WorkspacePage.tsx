@@ -22,6 +22,7 @@ import { useTimeRemaining } from '@/hooks/useTimeRemaining';
 export function WorkspacePage() {
   const navigate = useNavigate();
   const [connectOpen, setConnectOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: session } = useSession();
   const params = useAppParams();
@@ -90,12 +91,13 @@ export function WorkspacePage() {
       <AppHeader
         name={session?.name ?? ''}
         time={time}
+        onOpenMenu={() => setMenuOpen(true)}
         onEndSession={() => endSession.mutate()}
         endingSession={endSession.isPending}
       />
 
-      <div className="flex min-h-0 flex-1">
-        <AppSidebar>
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <AppSidebar open={menuOpen} onClose={() => setMenuOpen(false)}>
           <SidebarSection
             title="Databases"
             action={
@@ -113,6 +115,7 @@ export function WorkspacePage() {
                 // Re-clicking the open database would otherwise clear the
                 // conversation and bounce through the empty state.
                 if (id !== connectionId) selectConnection(id);
+                setMenuOpen(false);
               }}
               onDelete={(id) => deleteConnection.mutate(id)}
             />
@@ -134,7 +137,10 @@ export function WorkspacePage() {
                 conversations={conversations.data ?? []}
                 loading={conversations.isPending}
                 selectedId={conversationId}
-                onSelect={selectConversation}
+                onSelect={(id) => {
+                  selectConversation(id);
+                  setMenuOpen(false);
+                }}
               />
             ) : (
               <p className="px-2 py-3 text-[0.8125rem] text-slate">
@@ -154,7 +160,7 @@ export function WorkspacePage() {
             onConversationStarted={selectConversation}
           />
         ) : (
-          <div className="flex flex-1 items-center justify-center">
+          <div className="flex min-w-0 flex-1 items-center justify-center">
             <EmptyState
               title={list.length === 0 ? 'No database connected yet' : 'Pick a database'}
               description={
