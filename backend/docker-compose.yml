@@ -1,0 +1,56 @@
+# The backend stack: the API and the Redis holding its sessions.
+#
+#   cp .env.example .env     # fill GROQ_API_KEY, SECRET_KEY, CREDENTIALS_KEY
+#   docker compose up --build
+#
+# Add --profile demo to also start a seeded Postgres to connect to, so the app
+# has something to query without bringing your own database.
+
+services:
+  redis:
+    image: redis:7-alpine
+    # No persistence: every key here expires within 24 hours by design, so
+    # surviving a restart buys nothing and an AOF file only costs disk. The
+    # eviction policy is the backstop if sessions ever outpace the memory cap.
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # Overrides whatever .env says: inside the network, Redis is "redis".
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional. `docker compose --profile demo up` starts a small Postgres that
+  # the app can be pointed at: host "demo-db", port 5432, demo/demo/demo.
+  demo-db:
+    profiles: ["demo"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    volumes:
+      - ./demo/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

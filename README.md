@@ -1,53 +1,56 @@
 # SQL Agent
 
-Ask your database questions in plain English and get back real results. Connect a Postgres or MySQL database, type a question like "show me the top 10 customers by revenue last month", and it gets turned into an actual SQL query and run against your data.
+Ask your database questions in plain English and get back real results. Open the
+page, say who you are, connect a Postgres or MySQL database, and type something
+like "show me the top 10 customers by revenue last month" — it gets turned into
+an actual SQL query and run against your data.
 
-Built this to stop context-switching into a DB client every time I wanted to check something during dev.
+No accounts. Giving a name starts a session that lasts 24 hours; the databases
+you connect and the questions you ask live in that session and disappear with it.
 
 ## Stack
 
-**Backend** - FastAPI + SQLAlchemy (async), Alembic for migrations, LangChain + Groq for the agent, email/password auth with JWTs.
+**Backend** — FastAPI, Redis (the only datastore), LangChain + Groq for the agent.
+Everything Python is under `backend/`.
 
-**Frontend** - React + Vite, Tailwind, React Router.
+**Frontend** — React + Vite, Tailwind, React Router.
 
-## Running the project
+> **The frontend has not been updated for this API yet.** It still calls the old
+> `/auth/*` and `/api/databases/*` endpoints and is next on the list.
 
-### Prerequisites
+## Running it
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
-- Node.js 18+
-- A MySQL or PostgreSQL server for the app's own metadata (accounts, connections, conversations). The databases you *query* are separate - you connect those from the UI.
-
-### 1. Backend
-
-Create `backend/.env`:
+### Docker (everything, including Redis)
 
 ```
-DATABASE_URL=mysql+aiomysql://user:pass@localhost:3306/sql_agent
-GROQ_API_KEY=your-groq-key
-SECRET_KEY=any-long-random-string     # signs the JWTs
-CREDENTIALS_KEY=your-fernet-key       # encrypts stored database passwords
+cd backend
+cp .env.example .env          # fill GROQ_API_KEY, SECRET_KEY, CREDENTIALS_KEY
+docker compose up --build
 ```
 
-Generate a `CREDENTIALS_KEY` with:
+The API serves on http://localhost:8000, docs at `/docs`.
+
+Add `--profile demo` to also start a small seeded Postgres, so you have
+something to connect to straight away — host `demo-db`, port `5432`, and
+`demo` / `demo` / `demo`:
 
 ```
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+docker compose --profile demo up --build
 ```
 
-`ACCESS_TOKEN_EXPIRE_MINUTES` and `REFRESH_TOKEN_EXPIRE_DAYS` are optional (default 15 and 30).
+### Without Docker
 
-Install dependencies, run the migrations, and start the API - all from the repo root:
+Needs Python 3.12+ and a Redis you can reach.
 
 ```
-uv sync
-uv run alembic -c backend/alembic.ini upgrade head
-uv run uvicorn backend.main:app --reload
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # fill in the three required values
+uvicorn app.main:app --reload
 ```
 
-The API serves on http://localhost:8000.
-
-### 2. Frontend
+### Frontend
 
 ```
 cd frontend
@@ -55,93 +58,138 @@ npm install
 npm run dev
 ```
 
-Opens http://localhost:3000. To point it at a non-default backend, set `VITE_API_URL` in `frontend/.env` (see `.env.example`).
+## Configuration
 
-### 3. Use it
+Three values are required; everything else has a default. See
+`backend/.env.example` for the full list.
 
-Sign up, then add a database connection (host, port, user, password, database name). Select it and start asking questions - or switch to SQL mode to write queries yourself.
+| Variable | What it is |
+|---|---|
+| `GROQ_API_KEY` | Your Groq key. |
+| `SECRET_KEY` | Signs the session cookie. Any long random string. |
+| `CREDENTIALS_KEY` | Fernet key encrypting connection passwords before they go into Redis. |
+| `REDIS_URL` | Defaults to `redis://localhost:6379/0`; compose sets it for you. |
+| `GROQ_MODEL` | Defaults to `openai/gpt-oss-120b`. |
+| `CORS_ORIGINS` | Exact browser origins, comma separated. |
 
-> Connect each database with a **read-only account scoped to that one database**. The SQL guard blocks writes and cross-database access, but least-privilege credentials are the real safety net.
+Generate `CREDENTIALS_KEY` with:
+
+```
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+There is no `DATABASE_URL`. The app has no database of its own, and the databases
+it queries are supplied at runtime by whoever is asking.
 
 ## Workflow
 
-End to end, a question travels like this:
+1. **Start a session.** `POST /api/session` with a name. The session id is built
+   from that name and the timestamp, and comes back in a signed cookie. Everything
+   after this is scoped to it.
+2. **Connect a database.** `POST /api/connections` with host, port, user,
+   password, database name. The credentials are verified by actually connecting
+   before anything is stored, then the password is encrypted and kept in Redis.
+3. **Ask a question.** `POST /api/connections/{id}/natural-query`.
+4. **The agent works.** A tool-calling agent explores the schema and writes a
+   query. Every statement it runs goes through the read-only guard first.
+5. **You get results.** The rows come back with the SQL the agent settled on.
+6. **Follow up.** The turn is saved, so "now only the ones in London" refines the
+   previous question. Past conversations reload with their SQL and results intact.
 
-1. **Sign in.** Email/password login returns a short-lived access token (JWT) plus a refresh token. Every API call carries the access token.
-2. **Connect a database.** Its credentials are encrypted at rest (Fernet) and never handed back by the API. Connections show up in the left sidebar.
-3. **Ask a question.** Pick a database and type a question in plain English (or flip to SQL mode). The request hits `POST /api/databases/{id}/natural-query`.
-4. **The agent works.** A tool-calling agent explores the schema and writes a query. Every statement it runs is checked by the read-only guard first.
-5. **You get results.** The rows come back and render as a table, alongside the SQL the agent settled on.
-6. **Follow up.** The turn is saved, so "now only the ones in London" refines the previous question. Past conversations are browsable from the sidebar and reload with their SQL and results intact.
+## API
 
-The rest of this section is how each of those steps works underneath.
+| Method | Path | |
+|---|---|---|
+| `POST` | `/api/session` | start a session from a name |
+| `GET` | `/api/session` | who the caller is |
+| `DELETE` | `/api/session` | end it now |
+| `POST` | `/api/connections` | connect a database |
+| `GET` | `/api/connections` | list them |
+| `GET` | `/api/connections/{id}` | one, without its password |
+| `DELETE` | `/api/connections/{id}` | forget it, and its conversations |
+| `POST` | `/api/connections/{id}/natural-query` | ask a question |
+| `GET` | `/api/connections/{id}/conversations` | history, most recent first |
+| `GET` | `/api/connections/{id}/conversations/{conversation_id}` | one conversation, replayed |
+| `GET` | `/health` | health check (pings Redis) |
+
+Every endpoint but `POST /api/session` and `/health` needs the session cookie, so
+browser clients must send `credentials: 'include'`.
+
+## How it works
+
+### Sessions
+
+A name and a timestamp make the session id, with a random suffix so it is a
+credential rather than a guess — a name and a rough arrival time are both things
+an attacker can know. Starlette's `SessionMiddleware` signs that id into a cookie;
+the id is all the cookie holds. Everything else is in Redis:
+
+```
+session:{sid}                          the session
+session:{sid}:connections              connected databases, passwords encrypted
+session:{sid}:conversations            conversations
+session:{sid}:conv:{conv_id}:messages  the turns in one conversation
+```
+
+All of those keys carry the *same* absolute expiry, so a session and everything
+hanging off it die together at the 24-hour mark rather than leaving orphans
+behind. The deadline is fixed at creation, not extended on use: a session is a
+visit, and a visit has a length. `backend/app/session/store.py` owns the key
+names; nothing else builds a Redis key by hand.
 
 ### The agent
 
-It's a tool-calling agent (`backend/query/agent`), not a fixed pipeline. The model gets three tools - `list_tables`, `describe_table`, and `run_query` - and loops until it can answer, so it explores the schema instead of being handed a dump of it, and it self-corrects by reading the database's own error messages. The last query it runs successfully is what you get back.
+A tool-calling agent (`backend/app/query/agent`), not a fixed pipeline. The model
+gets three tools — `list_tables`, `describe_table`, `run_query` — and loops until
+it can answer, so it explores the schema instead of being handed a dump of it, and
+self-corrects by reading the database's own error messages. The last query it ran
+successfully is what you get back.
 
 ### The guard
 
-Every statement - whether the agent wrote it or you typed it in SQL mode - goes through the guard in `backend/query/guard` first. It enforces read-only, single-database access: one SELECT (or CTE) only, no writes, no reading or writing host files (`INTO OUTFILE`, `LOAD_FILE`, `pg_read_file`), no system schemas (`information_schema`, `mysql`, `pg_catalog`), and no reaching other databases. Quoted identifiers and keywords hiding inside string literals don't fool it. It's defence in depth, though - the real boundary is a database user granted read-only access to only the one database.
+Every statement the agent runs goes through `backend/app/query/guard` first. It
+enforces read-only, single-database access: one SELECT (or CTE) only, no writes,
+no reading or writing host files (`INTO OUTFILE`, `LOAD_FILE`, `pg_read_file`), no
+system schemas (`information_schema`, `mysql`, `pg_catalog`), and no reaching
+other databases. Quoted identifiers and keywords hiding inside string literals
+don't fool it.
 
-### Conversations
+It's defence in depth, though — the real boundary is the account you connect with.
 
-Conversations are persisted (`conversations` / `messages`), so follow-ups work - ask "top 3 customers by spend", then "now only the ones in London", and the second question refines the first. Each turn saves the reply, the SQL, and a snapshot of the result, so a past conversation reloads exactly as you left it - browse them from the history panel in the sidebar (`GET /api/databases/{id}/conversations`).
-
-### Auth
-
-Deliberately small: an account, a password, and a token. `users` + `sessions` is the whole schema.
-
-Passwords are bcrypt-hashed. Login returns a short-lived HS256 access token (stateless, signed with `SECRET_KEY`) plus a refresh token; only the refresh token has server-side state, stored as a SHA-256 hash in `sessions` so a presented token can be looked up directly. Logout revokes the session, which is what makes refresh stop working - an access token stays valid until it expires, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short.
-
-Endpoints: `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`, and `GET /auth/me`.
+> Connect each database with a **read-only account scoped to that one database**.
 
 ### Observability
 
-Logs and traces go through [Pydantic Logfire](https://pydantic.dev/docs/logfire), configured once in `backend/core/observability.py` and called from `main.py` before anything else is imported. FastAPI, SQLAlchemy, and HTTPX are instrumented, so requests, the SQL the agent runs, and the calls out to Groq all show up as spans on the same trace as the question that caused them.
+Logs and traces go through [Pydantic Logfire](https://pydantic.dev/docs/logfire),
+configured in `backend/app/core/observability.py` and called from `main.py` before
+anything else is imported. FastAPI, SQLAlchemy, Redis, and HTTPX are instrumented,
+so requests, the SQL the agent runs, and the calls out to Groq all land as spans
+on the same trace as the question that caused them. Without a token it prints to
+the console and sends nothing.
 
-Nothing is required to run the app: without a token it prints to the console and sends nothing (`send_to_logfire="if-token-present"`). To send traces, authenticate once and create a project - from the repo root, so the credentials land where the app looks:
-
-```
-uv run logfire auth
-uv run logfire projects new sql-agent
-```
-
-That writes `.logfire/logfire_credentials.json` (gitignored - it holds a write token), and the app picks it up on the next start, printing the project URL. `LOGFIRE_ENVIRONMENT` and `LOGFIRE_CONSOLE=false` are optional; `LOGFIRE_TOKEN` is an alternative to the credentials file and overrides it.
-
-The console shows INFO and above; everything from DEBUG up goes to Logfire. There is no log file - the backend is where the detail lives.
-
-## Project layout
+## Layout
 
 ```
 backend/
-  core/       config, db (engine + session), observability (Logfire)
-  auth/       models, router, schemas, service, deps, security
-  database/   models, router, schemas, service, crypto (connection management)
-  query/      models, router, schemas, service, guard, agent/, databases/
-  alembic/    migrations
-  main.py
-tests/        guard and connection-error tests (pytest)
+  Dockerfile  docker-compose.yml  .dockerignore
+  pyproject.toml  requirements.txt  .env.example
+  app/
+    main.py
+    core/         config, redis, crypto, observability, tracing
+    session/      store (the Redis key layout), router, deps
+    connections/  connect and manage databases
+    query/        router, service, guard/, agent/, databases/
+  tests/          guard, connection errors, session store
+  demo/           seed data for the optional demo database
 frontend/
-  src/
-    api/        central client (base URL + authed fetch)
-    components/ sidebars, chat, modal
-    context/    auth
-    pages/      landing, login, signup, app
+  src/            (not yet updated for this API)
 ```
 
-Each of `models`, `router`, `schemas`, `service`, and `guard` is a package folder (`__init__.py` holds the code).
+## Tests
 
-## Status
+```
+cd backend && pytest
+```
 
-Auth (signup/login/logout, JWT + refresh) and database connection management are working. The agent supports Postgres and MySQL.
-
-Connected-database credentials are encrypted at rest (`CREDENTIALS_KEY`) and never returned by the API.
-
-Run the tests with `uv run pytest`. They cover the guard (the safety-critical
-part) and the connection-error messages.
-
-Known rough edges:
-- No per-user rate limiting or query timeout yet.
-- Test coverage stops at the guard and error parsing; the agent, services, and
-  routers are not covered.
+They cover the guard (the safety-critical part), the connection-error messages,
+and the session store's expiry behaviour.

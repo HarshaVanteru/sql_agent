@@ -1,0 +1,25 @@
+# Secrets must never reach the image; the container gets them as env vars.
+.env
+.env.*
+!.env.example
+.logfire/
+
+.git
+.gitignore
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+tests/
+*.md
+Dockerfile
+docker-compose.yml

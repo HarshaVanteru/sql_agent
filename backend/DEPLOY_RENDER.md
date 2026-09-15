@@ -1,32 +1,45 @@
 # Deploying this backend to Render
 
-## What this package contains
+`render.yaml` in this directory declares both services. Point Render at it as a
+Blueprint and it creates them together.
 
-- FastAPI SQL Agent backend
-- Dockerfile for Render
-- Alembic migrations run at startup
-- `/health` endpoint for Render health checks
-- Environment-variable based configuration
-- `.env` excluded from the deployable package
+## What gets deployed
 
-## Important architecture note
+- The FastAPI app, from the `Dockerfile` in this directory.
+- A Key Value (Redis) instance, which is the app's only datastore. Sessions,
+  connected databases, and conversations all live there, and all of it expires
+  within 24 hours.
 
-The `DATABASE_URL` database is the application's own metadata database (users, saved database connections, conversations, etc.).
+There are no migrations and no application database to provision.
 
-The databases users connect to are separate. A Render server cannot reach a user's MySQL at `localhost`. A local connector / tunnel is still required for that feature.
+## Setup
 
-## Render setup
+1. Push the repository to GitHub.
+2. In Render, **New → Blueprint**, and select the repo.
+3. Set the blueprint's root directory to `backend`.
+4. Fill the secrets Render prompts for: `GROQ_API_KEY`, `CREDENTIALS_KEY`, and
+   `CORS_ORIGINS` (the exact origin your frontend is served from, e.g.
+   `https://sql-agent-lake.vercel.app`). `SECRET_KEY` is generated for you, and
+   `REDIS_URL` is wired from the Key Value service.
+5. Deploy.
 
-1. Push this `backend` directory to GitHub.
-2. In Render, create a **Web Service** from the repository.
-3. Choose **Docker** as the runtime.
-4. Set the root directory to the directory containing this Dockerfile (for this package, `backend` if it is nested in the repository).
-5. Set the health check path to `/health`.
-6. Add the environment variables from `.env.example`.
-7. Use a cloud-hosted MySQL database for `DATABASE_URL`.
-8. Deploy.
+Generate `CREDENTIALS_KEY` with:
 
-The application starts with:
+    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-    alembic upgrade head
-    uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+## The cookie has to be cross-site
+
+The session is a cookie, and the frontend is on a different site from the API,
+so the blueprint sets `SESSION_COOKIE_SAMESITE=none` and
+`SESSION_COOKIE_SECURE=true`. Both are required: browsers drop a `SameSite=None`
+cookie that is not `Secure`, and `Secure` needs HTTPS, which Render terminates.
+
+The frontend must send `credentials: 'include'` on every request, and
+`CORS_ORIGINS` must list its exact origin — a wildcard is not usable with
+credentials.
+
+## What Render cannot reach
+
+The databases people connect are their own. A Render service cannot reach a
+database on someone's `localhost`; it needs one that is reachable from the
+public internet, or a tunnel.
