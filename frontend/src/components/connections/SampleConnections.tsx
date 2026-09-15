@@ -6,22 +6,20 @@ interface SampleConnectionsProps {
   disabled: boolean;
 }
 
+/**
+ * One line, not a panel of cards.
+ *
+ * These are a shortcut for someone who has no database to hand -- useful, but
+ * not the point of the dialog, and the cards they used to sit in pushed the
+ * actual form off the bottom of the screen.
+ */
 export function SampleConnections({ onPick, disabled }: SampleConnectionsProps) {
   return (
-    <div className="rounded border border-dashed border-rule bg-surface p-3">
-      <p className="mb-2 text-[0.8125rem] text-slate">
-        No database to hand? Fill the form with a public read-only one.
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {SAMPLE_CONNECTIONS.map((sample) => (
-          <SampleConnectionButton
-            key={sample.id}
-            sample={sample}
-            onPick={onPick}
-            disabled={disabled}
-          />
-        ))}
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-slate">No database to hand?</span>
+      {SAMPLE_CONNECTIONS.map((sample) => (
+        <SampleConnectionButton key={sample.id} sample={sample} onPick={onPick} disabled={disabled} />
+      ))}
     </div>
   );
 }

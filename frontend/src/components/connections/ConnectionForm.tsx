@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 
-import { Button, FormError, TextField } from '@/components/ui';
+import { FormError, TextField } from '@/components/ui';
 import { errorMessage, isApiError } from '@/lib/ApiError';
 import { DatabaseTypeField } from './DatabaseTypeField';
 import { SampleConnections } from './SampleConnections';
@@ -11,10 +11,10 @@ type Draft = ReturnType<typeof useConnectionDraft>;
 
 interface ConnectionFormProps {
   form: Draft;
+  formId: string;
   pending: boolean;
   error: unknown;
   onSubmit: () => void;
-  onCancel: () => void;
 }
 
 /**
@@ -31,7 +31,7 @@ function formLevelError(error: unknown): string | null {
   return errorMessage(error, 'Could not connect.');
 }
 
-export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: ConnectionFormProps) {
+export function ConnectionForm({ form, formId, pending, error, onSubmit }: ConnectionFormProps) {
   const { draft, setField, setDbType, applySample, errorFor, touch, touchAllAndCheck } = form;
 
   function handleSubmit(event: FormEvent) {
@@ -44,10 +44,10 @@ export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: Con
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+    <form id={formId} onSubmit={handleSubmit} noValidate className="flex flex-col gap-3.5">
       <SampleConnections onPick={pickSample} disabled={pending} />
 
-      <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         <TextField
           id="connection-name"
           label="Name"
@@ -66,7 +66,11 @@ export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: Con
           error={errorFor('dbType')}
           disabled={pending}
         />
+      </div>
 
+      {/* Host and port are one address, so they share a row -- and a port is
+          four characters, so it does not get half the width. */}
+      <div className="grid grid-cols-[1fr_5.5rem] gap-x-3">
         <TextField
           id="connection-host"
           label="Host"
@@ -94,22 +98,9 @@ export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: Con
           error={errorFor('port')}
           disabled={pending}
         />
+      </div>
 
-        <TextField
-          id="connection-database"
-          label="Database"
-          required
-          value={draft.databaseName}
-          onChange={(event) => setField('databaseName', event.target.value)}
-          onBlur={() => touch('databaseName')}
-          error={errorFor('databaseName')}
-          placeholder="analytics"
-          disabled={pending}
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <div className="hidden sm:block" aria-hidden="true" />
-
+      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         <TextField
           id="connection-username"
           label="User"
@@ -118,6 +109,7 @@ export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: Con
           onChange={(event) => setField('username', event.target.value)}
           onBlur={() => touch('username')}
           error={errorFor('username')}
+          placeholder="readonly"
           disabled={pending}
           autoComplete="off"
           spellCheck={false}
@@ -129,27 +121,30 @@ export function ConnectionForm({ form, pending, error, onSubmit, onCancel }: Con
           value={draft.password}
           onChange={(event) => setField('password', event.target.value)}
           error={errorFor('password')}
-          hint="Leave blank if the database has none"
+          placeholder="Blank if none"
           disabled={pending}
           autoComplete="new-password"
         />
       </div>
 
-      <p className="text-[0.8125rem] leading-relaxed text-slate">
-        Use an account with read-only access to this one database. The agent is blocked from
-        writing, but least-privilege credentials are the real safety net.
-      </p>
+      {/* Full width rather than half a row with an empty cell beside it:
+          seven fields do not divide into pairs, and this is the one that
+          benefits from the room. */}
+      <TextField
+        id="connection-database"
+        label="Database"
+        required
+        value={draft.databaseName}
+        onChange={(event) => setField('databaseName', event.target.value)}
+        onBlur={() => touch('databaseName')}
+        error={errorFor('databaseName')}
+        placeholder="analytics"
+        disabled={pending}
+        autoComplete="off"
+        spellCheck={false}
+      />
 
       <FormError message={formLevelError(error)} />
-
-      <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={pending}>
-          Cancel
-        </Button>
-        <Button type="submit" loading={pending}>
-          {pending ? 'Connecting' : 'Connect'}
-        </Button>
-      </div>
     </form>
   );
 }

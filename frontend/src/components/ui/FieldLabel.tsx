@@ -10,7 +10,10 @@ interface FieldLabelProps {
 
 export function FieldLabel({ htmlFor, required = false, children }: FieldLabelProps) {
   return (
-    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-ink">
+    <label
+      htmlFor={htmlFor}
+      className="mb-1 block text-xs font-medium tracking-[0.01em] text-slate"
+    >
       {children}
       {required && <RequiredMark />}
     </label>

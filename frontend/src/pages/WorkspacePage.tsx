@@ -54,9 +54,13 @@ export function WorkspacePage() {
 
   // A connection id in the URL that no longer exists (deleted, or from an
   // expired session) would otherwise leave the panel pointing at nothing.
+  // Never while a fetch is in flight: mid-refetch the list is not yet the
+  // answer, and clearing then would throw away a valid selection.
   useEffect(() => {
-    if (connectionId && connections.isSuccess && !selected) selectConnection(null);
-  }, [connectionId, connections.isSuccess, selected, selectConnection]);
+    if (connectionId && connections.isSuccess && !connections.isFetching && !selected) {
+      selectConnection(null);
+    }
+  }, [connectionId, connections.isSuccess, connections.isFetching, selected, selectConnection]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper">

@@ -6,11 +6,15 @@ import { IconButton } from './IconButton';
 interface ModalProps {
   open: boolean;
   title: string;
+  /** One line under the title, when the dialog needs framing. */
+  description?: string;
+  /** Pinned below the scrolling body, so actions stay reachable. */
+  footer?: ReactNode;
   onClose: () => void;
   children: ReactNode;
 }
 
-export function Modal({ open, title, onClose, children }: ModalProps) {
+export function Modal({ open, title, description, footer, onClose, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,25 +40,40 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      {/*
+        A column capped at the viewport, with only the middle scrolling. However
+        tall the contents get, the dialog stays inside the window and the footer
+        stays in reach -- which is not true of a panel that simply grows.
+        Elevation is the one shadow in the app: it is what separates the dialog
+        from the page, not decoration.
+      */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="my-auto w-full max-w-md rounded-md border border-rule bg-raised"
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-xl border border-rule bg-raised shadow-[0_16px_48px_-12px_rgba(16,28,43,0.28)] sm:max-h-[86dvh] sm:rounded-xl"
       >
-        <header className="flex items-center justify-between border-b border-rule px-5 py-3.5">
-          <h2 className="text-[0.9375rem] font-semibold text-ink">{title}</h2>
-          <IconButton label="Close" onClick={onClose}>
+        <header className="flex shrink-0 items-start justify-between gap-4 px-5 pb-3 pt-4">
+          <div className="min-w-0">
+            <h2 className="text-[0.9375rem] font-semibold tracking-tight text-ink">{title}</h2>
+            {description && <p className="mt-0.5 text-[0.8125rem] text-slate">{description}</p>}
+          </div>
+          <IconButton label="Close" onClick={onClose} className="-mr-1 shrink-0">
             <CloseIcon />
           </IconButton>
         </header>
-        <div className="p-5">{children}</div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div>
+
+        {footer && (
+          <footer className="shrink-0 border-t border-rule bg-surface px-5 py-3">{footer}</footer>
+        )}
       </div>
     </div>
   );

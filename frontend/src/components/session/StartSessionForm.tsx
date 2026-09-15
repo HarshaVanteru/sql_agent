@@ -46,8 +46,9 @@ export function StartSessionForm({ onStart, pending, error }: StartSessionFormPr
           autoFocus
           className="flex-1"
         />
-        {/* Nudged down to sit on the input's baseline, past the label. */}
-        <Button type="submit" loading={pending} className="sm:mt-[1.875rem] sm:w-36">
+        {/* Pushed past the label so it lines up with the input, not the label:
+            text-xs is a 1rem line box plus the label's 0.25rem margin. */}
+        <Button type="submit" loading={pending} className="sm:mt-5 sm:w-36">
           Start session
         </Button>
       </div>

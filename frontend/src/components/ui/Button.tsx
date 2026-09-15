@@ -15,7 +15,9 @@ const VARIANTS: Record<Variant, string> = {
 
 const SIZES: Record<Size, string> = {
   sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-[0.9375rem]',
+  // Matches the 36px control height, so a button sitting in a form row lines up
+  // with the inputs beside it.
+  md: 'h-9 px-4 text-sm',
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -39,7 +41,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded font-medium',
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium',
         'transition-colors duration-100',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
         'disabled:cursor-not-allowed disabled:opacity-45',

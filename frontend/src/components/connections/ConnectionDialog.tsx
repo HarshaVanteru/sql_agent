@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 
-import { Modal } from '@/components/ui';
+import { Button, Modal } from '@/components/ui';
 import { useCreateConnection } from '@/hooks/useConnections';
 import type { Connection } from '@/types';
 import { ConnectionForm } from './ConnectionForm';
 import { useConnectionDraft } from './useConnectionDraft';
+
+const FORM_ID = 'connect-database-form';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -32,17 +34,30 @@ export function ConnectionDialog({ open, onClose, onConnected }: ConnectionDialo
   }, [open]);
 
   return (
-    <Modal open={open} title="Connect a database" onClose={onClose}>
+    <Modal
+      open={open}
+      title="Connect a database"
+      description="Read-only credentials, checked before anything is saved."
+      onClose={onClose}
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={create.isPending}>
+            Cancel
+          </Button>
+          {/* Outside the <form>, so `form` ties it back to one. That is what
+              lets the button sit in the pinned footer while the fields scroll. */}
+          <Button type="submit" form={FORM_ID} loading={create.isPending}>
+            {create.isPending ? 'Connecting' : 'Connect'}
+          </Button>
+        </div>
+      }
+    >
       <ConnectionForm
         form={form}
+        formId={FORM_ID}
         pending={create.isPending}
         error={create.error}
-        onSubmit={() =>
-          create.mutate(trimmed, {
-            onError: applyServerError,
-          })
-        }
-        onCancel={onClose}
+        onSubmit={() => create.mutate(trimmed, { onError: applyServerError })}
       />
     </Modal>
   );

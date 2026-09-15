@@ -3,8 +3,8 @@ import type { ConnectionDraft } from '@/types';
 export interface SampleConnection {
   id: string;
   label: string;
-  /** What is in it, so the buttons are a choice rather than a coin toss. */
-  description: string;
+  /** The engine, shown beside the name so the pair is a choice not a coin toss. */
+  engine: string;
   draft: ConnectionDraft;
 }
 
@@ -20,7 +20,7 @@ export const SAMPLE_CONNECTIONS: readonly SampleConnection[] = [
   {
     id: 'rnacentral',
     label: 'RNAcentral',
-    description: 'PostgreSQL · RNA sequences, ~100 tables',
+    engine: 'PostgreSQL',
     draft: {
       name: 'RNAcentral',
       dbType: 'postgresql',
@@ -34,7 +34,7 @@ export const SAMPLE_CONNECTIONS: readonly SampleConnection[] = [
   {
     id: 'rfam',
     label: 'Rfam',
-    description: 'MySQL · RNA families, no password needed',
+    engine: 'MySQL',
     draft: {
       name: 'Rfam',
       dbType: 'mysql',

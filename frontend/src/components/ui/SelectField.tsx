@@ -1,8 +1,9 @@
 import type { SelectHTMLAttributes } from 'react';
 
-import { cn } from '@/lib/cn';
+import { ChevronDownIcon } from '@/components/icons/ChevronDownIcon';
 import { FieldError } from './FieldError';
 import { FieldLabel } from './FieldLabel';
+import { controlClasses } from './fieldStyles';
 
 interface Option {
   value: string;
@@ -32,26 +33,25 @@ export function SelectField({
       <FieldLabel htmlFor={id} required={required}>
         {label}
       </FieldLabel>
-      <select
-        {...props}
-        id={id}
-        required={required}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        className={cn(
-          'h-10 w-full rounded border bg-raised px-3 text-[0.9375rem] text-ink',
-          'focus:outline-none focus:ring-1',
-          error
-            ? 'border-danger focus:border-danger focus:ring-danger'
-            : 'border-rule focus:border-signal focus:ring-signal',
-        )}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {/* appearance-none and our own chevron: the platform arrow is a different
+          shape and weight in every browser, and sits next to our own icons. */}
+      <div className="relative">
+        <select
+          {...props}
+          id={id}
+          required={required}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className={controlClasses(Boolean(error), 'appearance-none pr-8')}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+      </div>
       <FieldError id={errorId} message={error} />
     </div>
   );
