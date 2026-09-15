@@ -15,6 +15,12 @@ services:
       --appendonly no
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
+    ports:
+      # Bound to loopback so the API can be run outside Docker against it:
+      #   docker compose up -d redis && uvicorn app.main:app --reload
+      # 127.0.0.1 rather than 0.0.0.0 -- an unauthenticated Redis should not be
+      # listening on the network.
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

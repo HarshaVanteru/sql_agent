@@ -27,17 +27,27 @@ docker compose up --build
 
 The API serves on http://localhost:8000, docs at `/docs`.
 
-### Without Docker
+### Backend locally, Redis in Docker
 
-Needs Python 3.12+ and a Redis you can reach.
+The usual loop while working on the backend: Redis in a container, the API on
+your machine with reload. Needs Python 3.12+.
 
 ```
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # fill in the three required values
+pip install pytest                 # for the tests
+
+cp .env.example .env               # fill in the three required values
+docker compose up -d redis         # published on 127.0.0.1:6379
 uvicorn app.main:app --reload
 ```
+
+`.env` already points `REDIS_URL` at `localhost:6379`, so nothing else to set.
+Stop Redis with `docker compose down` when you're done.
+
+Run the tests with `pytest` from `backend/`.
 
 ### Frontend
 
