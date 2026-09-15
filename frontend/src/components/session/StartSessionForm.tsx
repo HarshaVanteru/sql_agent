@@ -2,7 +2,9 @@ import { useState, type FormEvent } from 'react';
 
 import { Button, FormError, TextField } from '@/components/ui';
 import { errorMessage, isApiError } from '@/lib/ApiError';
+import { randomName } from '@/lib/randomNames';
 import { firstError, maxLength, required } from '@/lib/validation';
+import { GenerateNameButton } from './GenerateNameButton';
 
 interface StartSessionFormProps {
   onStart: (name: string) => void;
@@ -26,6 +28,14 @@ export function StartSessionForm({ onStart, pending, error }: StartSessionFormPr
     if (!validationError) onStart(name.trim());
   }
 
+  function generate() {
+    // Not the one already showing, so a second click visibly does something.
+    setName(randomName(name));
+    // A generated name is always valid, and leaving the field untouched would
+    // hold back an error that can no longer apply anyway.
+    setTouched(true);
+  }
+
   const formError =
     error != null && !serverFieldError ? errorMessage(error, 'Could not start a session.') : null;
 
@@ -40,10 +50,13 @@ export function StartSessionForm({ onStart, pending, error }: StartSessionFormPr
           onChange={(event) => setName(event.target.value)}
           onBlur={() => setTouched(true)}
           error={shown}
+          hint="Any name will do. It is only there to label the session."
           placeholder="Who's asking?"
           autoComplete="name"
           maxLength={100}
+          disabled={pending}
           autoFocus
+          trailing={<GenerateNameButton onGenerate={generate} disabled={pending} />}
           className="flex-1"
         />
         {/* Pushed past the label so it lines up with the input, not the label:
