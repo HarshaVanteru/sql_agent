@@ -1,25 +1,29 @@
 import { SampleConnectionButton } from './SampleConnectionButton';
-import { SAMPLE_CONNECTIONS, type SampleConnection } from './sampleConnections';
+import type { SampleConnection } from './sampleConnections';
 
 interface SampleConnectionsProps {
+  samples: readonly SampleConnection[];
   onPick: (sample: SampleConnection) => void;
   disabled: boolean;
 }
 
 /**
- * One line, not a panel of cards.
+ * A hint above the form, not a menu.
  *
- * These are a shortcut for someone who has no database to hand -- useful, but
- * not the point of the dialog, and the cards they used to sit in pushed the
- * actual form off the bottom of the screen.
+ * The label sits on its own line: three pills and a sentence on one row wraps
+ * at this width, and a hint that reflows as the dialog opens reads as broken.
  */
-export function SampleConnections({ onPick, disabled }: SampleConnectionsProps) {
+export function SampleConnections({ samples, onPick, disabled }: SampleConnectionsProps) {
+  if (samples.length === 0) return null;
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-slate">No database to hand?</span>
-      {SAMPLE_CONNECTIONS.map((sample) => (
-        <SampleConnectionButton key={sample.id} sample={sample} onPick={onPick} disabled={disabled} />
-      ))}
+    <div>
+      <p className="mb-1.5 text-xs text-slate">No database to hand? Try one of these.</p>
+      <div className="flex flex-wrap gap-1.5">
+        {samples.map((sample) => (
+          <SampleConnectionButton key={sample.id} sample={sample} onPick={onPick} disabled={disabled} />
+        ))}
+      </div>
     </div>
   );
 }

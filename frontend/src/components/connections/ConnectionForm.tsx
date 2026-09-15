@@ -12,6 +12,7 @@ type Draft = ReturnType<typeof useConnectionDraft>;
 interface ConnectionFormProps {
   form: Draft;
   formId: string;
+  samples: readonly SampleConnection[];
   pending: boolean;
   error: unknown;
   onSubmit: () => void;
@@ -31,7 +32,7 @@ function formLevelError(error: unknown): string | null {
   return errorMessage(error, 'Could not connect.');
 }
 
-export function ConnectionForm({ form, formId, pending, error, onSubmit }: ConnectionFormProps) {
+export function ConnectionForm({ form, formId, samples, pending, error, onSubmit }: ConnectionFormProps) {
   const { draft, setField, setDbType, applySample, errorFor, touch, touchAllAndCheck } = form;
 
   function handleSubmit(event: FormEvent) {
@@ -45,7 +46,7 @@ export function ConnectionForm({ form, formId, pending, error, onSubmit }: Conne
 
   return (
     <form id={formId} onSubmit={handleSubmit} noValidate className="flex flex-col gap-3.5">
-      <SampleConnections onPick={pickSample} disabled={pending} />
+      <SampleConnections samples={samples} onPick={pickSample} disabled={pending} />
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         <TextField

@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { Button, Modal } from '@/components/ui';
 import { useCreateConnection } from '@/hooks/useConnections';
 import type { Connection } from '@/types';
 import { ConnectionForm } from './ConnectionForm';
+import { pickSampleConnections } from './sampleConnections';
 import { useConnectionDraft } from './useConnectionDraft';
 
 const FORM_ID = 'connect-database-form';
@@ -16,6 +17,13 @@ interface ConnectionDialogProps {
 
 export function ConnectionDialog({ open, onClose, onConnected }: ConnectionDialogProps) {
   const form = useConnectionDraft();
+
+  // Keyed on `open` rather than shuffled in the effect below: an effect runs
+  // after the first render, so the dialog painted the previous open's three
+  // and swapped them a frame later. useMemo computes during render, so the
+  // pills are right the first time they are drawn -- and stable afterwards,
+  // rather than reshuffling under the pointer on every keystroke.
+  const samples = useMemo(() => pickSampleConnections(), [open]);
   const { reset, applyServerError, trimmed } = form;
 
   const create = useCreateConnection((connection) => {
@@ -55,6 +63,7 @@ export function ConnectionDialog({ open, onClose, onConnected }: ConnectionDialo
       <ConnectionForm
         form={form}
         formId={FORM_ID}
+        samples={samples}
         pending={create.isPending}
         error={create.error}
         onSubmit={() => create.mutate(trimmed, { onError: applyServerError })}
