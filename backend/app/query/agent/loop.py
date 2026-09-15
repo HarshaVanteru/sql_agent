@@ -12,7 +12,7 @@ from app.query.agent.tools import build_tools
 # never returns, and every round is an LLM call the user waits on.
 MAX_ITERATIONS = settings.AGENT_MAX_ITERATIONS
 
-llm = ChatGroq( model=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY, temperature=0)
+llm = ChatGroq(model=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY, temperature=0)
 
 _EMPTY_RESULT = {"columns": [], "rows": []}
 
