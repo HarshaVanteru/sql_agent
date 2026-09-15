@@ -13,10 +13,7 @@ you connect and the questions you ask live in that session and disappear with it
 **Backend** — FastAPI, Redis (the only datastore), LangChain + Groq for the agent.
 Everything Python is under `backend/`.
 
-**Frontend** — React + Vite, Tailwind, React Router.
-
-> **The frontend has not been updated for this API yet.** It still calls the old
-> `/auth/*` and `/api/databases/*` endpoints and is next on the list.
+**Frontend** — React + TypeScript, Vite, Tailwind, React Router, TanStack Query.
 
 ## Running it
 
@@ -29,14 +26,6 @@ docker compose up --build
 ```
 
 The API serves on http://localhost:8000, docs at `/docs`.
-
-Add `--profile demo` to also start a small seeded Postgres, so you have
-something to connect to straight away — host `demo-db`, port `5432`, and
-`demo` / `demo` / `demo`:
-
-```
-docker compose --profile demo up --build
-```
 
 ### Without Docker
 
@@ -57,6 +46,10 @@ cd frontend
 npm install
 npm run dev
 ```
+
+Opens http://localhost:3000, which is one of the origins the API allows by
+default. Point it elsewhere with `VITE_API_URL` in `frontend/.env`, and add that
+origin to the API's `CORS_ORIGINS`.
 
 ## Configuration
 
@@ -137,6 +130,23 @@ behind. The deadline is fixed at creation, not extended on use: a session is a
 visit, and a visit has a length. `backend/app/session/store.py` owns the key
 names; nothing else builds a Redis key by hand.
 
+### The URL is the state
+
+What you are looking at lives in the query string, so a refresh, the back
+button, or a reopened tab all land in the same place:
+
+```
+/workspace?session=venu-1789489589-HBlY&connection=cb37&conversation=9c2a
+```
+
+`useAppParams` (`frontend/src/hooks/useAppParams.ts`) is the only place those
+params are read or written.
+
+The session id is mirrored there for legibility and deep links, but it is **not**
+what authenticates — that is the HttpOnly cookie. A URL sent to someone else
+shows them the start screen, not your databases. If the URL and the cookie
+disagree, the cookie wins and the URL is corrected.
+
 ### The agent
 
 A tool-calling agent (`backend/app/query/agent`), not a fixed pipeline. The model
@@ -179,10 +189,15 @@ backend/
     session/      store (the Redis key layout), router, deps
     connections/  connect and manage databases
     query/        router, service, guard/, agent/, databases/
-  tests/          guard, connection errors, session store
-  demo/           seed data for the optional demo database
+  tests/          the SQL guard
 frontend/
-  src/            (not yet updated for this API)
+  src/
+    types/        the API's shapes, mirroring the Pydantic schemas
+    lib/          fetch client, error type, cache keys, formatting
+    api/          one module per resource, snake_case in, camelCase out
+    hooks/        one concern each; useAppParams owns the URL
+    components/   ui/ primitives, then one folder per feature
+    pages/        landing, workspace
 ```
 
 ## Tests
@@ -191,5 +206,7 @@ frontend/
 cd backend && pytest
 ```
 
-They cover the guard (the safety-critical part), the connection-error messages,
-and the session store's expiry behaviour.
+They cover the guard — the code standing between an LLM-written query and a
+real database, where a regression is a security bug rather than a broken page.
+
+The frontend is checked by the compiler: `cd frontend && npm run typecheck`.
