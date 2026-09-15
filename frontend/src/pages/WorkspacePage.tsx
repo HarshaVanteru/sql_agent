@@ -63,7 +63,7 @@ export function WorkspacePage() {
   }, [connectionId, connections.isSuccess, connections.isFetching, selected, selectConnection]);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-paper">
+    <div className="flex h-dvh flex-col overflow-hidden bg-paper">
       <SessionMeter time={time} />
       <AppHeader
         name={session?.name ?? ''}

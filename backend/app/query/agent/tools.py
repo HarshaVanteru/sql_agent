@@ -59,6 +59,48 @@ def _format_rows(columns: list[str], rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# What a tool hands back to the model when something fails. A driver error can
+# be forty lines with the whole generated SQL in it, and every one of those
+# lines is context the model then cannot use for the actual question.
+_MAX_TOOL_ERROR = 300
+
+
+def _brief(error: Exception) -> str:
+    """The first line of an error, capped. Enough to self-correct from."""
+    text = " ".join(str(error).split("\n")[0].split())
+    return text[:_MAX_TOOL_ERROR] + ("..." if len(text) > _MAX_TOOL_ERROR else "")
+
+
+# SQLAlchemy's Postgres inspector joins pg_collation to report column
+# collations, and a read-only account is often not granted it -- which is how
+# describing a table fails outright on a database the agent can otherwise read
+# perfectly well. This asks information_schema for the three things actually
+# needed instead.
+#
+# Our SQL, not the model's, so it does not go through the guard: the guard
+# exists to stop the model reaching system schemas, and this is the introspection
+# the model is supposed to get *instead* of trying that itself.
+_COLUMNS_FALLBACK = """
+    SELECT table_schema, column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_name = :table_name
+    ORDER BY table_schema, ordinal_position
+"""
+
+
+def _columns_via_information_schema(engine, table_name: str) -> list[str]:
+    """Column lines for `table_name`, using only information_schema."""
+    with engine.connect() as conn:
+        rows = conn.execute(text(_COLUMNS_FALLBACK), {"table_name": table_name}).fetchall()
+
+    lines = []
+    for schema, column, data_type, nullable in rows:
+        null = "" if nullable == "YES" else " NOT NULL"
+        prefix = f"{schema}." if len({r[0] for r in rows}) > 1 else ""
+        lines.append(f"  - {prefix}{column} ({data_type}){null}")
+    return lines
+
+
 def build_tools(engine):
     """Build the agent's tools bound to `engine`, plus the recorder they write to."""
     recorder = QueryRecorder()
@@ -73,8 +115,8 @@ def build_tools(engine):
         try:
             names = inspect(engine).get_table_names()
         except Exception as e:
-            logfire.exception("list_tables failed: {error}", error=str(e))
-            return f"Error listing tables: {e}"
+            logfire.warning("list_tables failed: {error}", error=_brief(e))
+            return f"Error listing tables: {_brief(e)}"
         return ", ".join(sorted(names)) if names else "(database has no tables)"
 
     @tool
@@ -87,23 +129,40 @@ def build_tools(engine):
                 return f"No table named '{table_name}'. Available tables: {available}"
 
             lines = [f"Table: {table_name}"]
-            for col in inspector.get_columns(table_name):
-                null = "" if col.get("nullable", True) else " NOT NULL"
-                lines.append(f"  - {col['name']} ({col['type']}){null}")
+            try:
+                for col in inspector.get_columns(table_name):
+                    null = "" if col.get("nullable", True) else " NOT NULL"
+                    lines.append(f"  - {col['name']} ({col['type']}){null}")
+            except Exception as e:
+                # Usually a privilege the inspector needs and this account does
+                # not have. The columns are still readable a simpler way.
+                logfire.info(
+                    "Inspector could not read {table_name}, using information_schema: {error}",
+                    table_name=table_name,
+                    error=_brief(e),
+                )
+                lines.extend(_columns_via_information_schema(engine, table_name))
 
-            for fk in inspector.get_foreign_keys(table_name):
-                cols = ", ".join(fk["constrained_columns"])
-                ref_cols = ", ".join(fk["referred_columns"])
-                lines.append(f"  FK: {cols} -> {fk['referred_table']}.{ref_cols}")
+            if len(lines) == 1:
+                return f"No column information available for '{table_name}'."
+
+            try:
+                for fk in inspector.get_foreign_keys(table_name):
+                    cols = ", ".join(fk["constrained_columns"])
+                    ref_cols = ", ".join(fk["referred_columns"])
+                    lines.append(f"  FK: {cols} -> {fk['referred_table']}.{ref_cols}")
+            except Exception as e:
+                # Foreign keys are a nicety; columns are the job.
+                logfire.info("Could not read foreign keys: {error}", error=_brief(e))
 
             return "\n".join(lines)
         except Exception as e:
-            logfire.exception(
+            logfire.warning(
                 "describe_table({table_name}) failed: {error}",
                 table_name=table_name,
-                error=str(e),
+                error=_brief(e),
             )
-            return f"Error describing '{table_name}': {e}"
+            return f"Error describing '{table_name}': {_brief(e)}"
 
     @tool
     def run_query(query: str) -> str:
