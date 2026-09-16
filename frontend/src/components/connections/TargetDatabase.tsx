@@ -26,6 +26,13 @@ interface TargetDatabaseProps {
  * made the selected one hard to find, and the selected one is the only thing
  * that changes what a question will do. The others are one click away, under
  * the chevron.
+ *
+ * Which leaves a third state, between "none connected" and "one is the target":
+ * databases exist and none is selected, which is what every fresh arrival looks
+ * like, because the selection lives in the URL and a new tab has no `connection`
+ * param. There is no target to put in the card then, so the alternatives become
+ * the card -- listed outright rather than behind the chevron, since a chevron
+ * hanging off a row that isn't there is not something anyone can find.
  */
 export function TargetDatabase({
   connections,
@@ -55,32 +62,46 @@ export function TargetDatabase({
             <Spinner className="text-muted" />
             Loading databases
           </p>
-        ) : selected ? (
+        ) : connections.length > 0 ? (
           <>
-            <div className="flex items-center gap-2.5 px-3 py-2.5">
-              <DatabaseIcon className="h-5 w-5 shrink-0 text-signal-bright" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-ink">
-                  {selected.name}
+            {selected ? (
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <DatabaseIcon className="h-5 w-5 shrink-0 text-signal-bright" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {selected.name}
+                  </span>
+                  <span className="block truncate font-mono text-[0.6875rem] text-muted">
+                    {DATABASE_LABELS[selected.dbType] ?? selected.dbType}
+                  </span>
                 </span>
-                <span className="block truncate font-mono text-[0.6875rem] text-muted">
-                  {DATABASE_LABELS[selected.dbType] ?? selected.dbType}
+                {connections.length > 1 && (
+                  <IconButton
+                    label={open ? 'Hide other databases' : 'Switch database'}
+                    aria-expanded={open}
+                    onClick={() => setOpen((value) => !value)}
+                  >
+                    <ChevronDownIcon
+                      className={cn('h-4 w-4 transition-transform', open && 'rotate-180')}
+                    />
+                  </IconButton>
+                )}
+              </div>
+            ) : (
+              // No target, so no name to show and nothing to collapse: this
+              // heads the list below rather than standing in for a selection.
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <DatabaseIcon className="h-5 w-5 shrink-0 text-muted" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-ink">Choose a database</span>
+                  <span className="block text-[0.6875rem] text-muted">
+                    {connections.length === 1 ? '1 connected' : `${connections.length} connected`}
+                  </span>
                 </span>
-              </span>
-              {connections.length > 1 && (
-                <IconButton
-                  label={open ? 'Hide other databases' : 'Switch database'}
-                  aria-expanded={open}
-                  onClick={() => setOpen((value) => !value)}
-                >
-                  <ChevronDownIcon
-                    className={cn('h-4 w-4 transition-transform', open && 'rotate-180')}
-                  />
-                </IconButton>
-              )}
-            </div>
+              </div>
+            )}
 
-            {open && others.length > 0 && (
+            {(open || !selected) && others.length > 0 && (
               <ul className="border-t border-rule">
                 {others.map((connection) => (
                   <li key={connection.id} className="group flex items-center gap-2 px-2 py-1">
