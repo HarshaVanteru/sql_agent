@@ -18,7 +18,7 @@ export function FollowUpQuestions({ questions, onPick, disabled }: FollowUpQuest
 
   return (
     <div>
-      <p className="mb-1.5 text-xs text-slate">Ask next</p>
+      <p className="mb-2 px-1 font-serif text-[0.8125rem] italic text-muted">Ask next</p>
       <SuggestedQuestions
         questions={questions}
         onPick={onPick}

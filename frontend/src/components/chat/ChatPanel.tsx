@@ -14,10 +14,17 @@ import { MessageList } from './MessageList';
 interface ChatPanelProps {
   connection: Connection;
   conversationId: string | null;
+  /** Initials for the question bubbles, from the session's name. */
+  userInitials: string;
   onConversationStarted: (conversationId: string) => void;
 }
 
-export function ChatPanel({ connection, conversationId, onConversationStarted }: ChatPanelProps) {
+export function ChatPanel({
+  connection,
+  conversationId,
+  userInitials,
+  onConversationStarted,
+}: ChatPanelProps) {
   const [prefill, setPrefill] = useState<string>();
   const conversation = useConversation(connection.id, conversationId);
 
@@ -47,11 +54,16 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
           disabled={ask.isPending}
         />
       ) : (
-        <MessageList messages={messages} thinking={ask.isPending} />
+        <MessageList
+          messages={messages}
+          thinking={ask.isPending}
+          connectionName={connection.name}
+          userInitials={userInitials}
+        />
       )}
 
-      <div className="shrink-0 border-t border-rule bg-surface px-4 py-3 sm:px-6">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2.5">
+      <div className="shrink-0 px-4 pb-4 pt-2 sm:px-6">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
           {messages.length > 0 && !ask.isPending && (
             <FollowUpQuestions
               questions={suggestions}
@@ -59,13 +71,19 @@ export function ChatPanel({ connection, conversationId, onConversationStarted }:
               disabled={ask.isPending}
             />
           )}
-          <FormError message={askError ? errorMessage(askError, 'The question could not be answered.') : null} />
+          <FormError
+            message={askError ? errorMessage(askError, 'The question could not be answered.') : null}
+          />
           <AskForm
             onAsk={(question) =>
               ask.mutate({ question, conversationId: conversationId ?? undefined })
             }
             pending={ask.isPending}
             disabled={false}
+            connectionName={connection.name}
+            // So the composer keeps the question when it could not be answered,
+            // rather than clearing it under the error message above.
+            failed={askError !== null}
             prefill={prefill}
           />
         </div>

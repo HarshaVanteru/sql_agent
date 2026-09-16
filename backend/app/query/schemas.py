@@ -21,6 +21,11 @@ class NaturalLanguageQueryResponse(BaseModel):
     row_count: int = 0
     conversation_id: str | None = None
     message: str | None = None
+    # Wall-clock milliseconds the agent took: schema reads, model calls and the
+    # query itself. Reported because "why was that slow" is the first question
+    # anyone asks of a tool that writes its own SQL, and without it the only
+    # answer is a shrug.
+    elapsed_ms: int | None = None
 
 
 class MessageResponse(BaseModel):
@@ -30,6 +35,9 @@ class MessageResponse(BaseModel):
     sql_query: str | None = None
     result: dict[str, Any] | None = None
     created_at: datetime
+    # Only on assistant turns, and only on turns recorded since this was added:
+    # older ones stored in Redis have no such key and come back None.
+    elapsed_ms: int | None = None
 
 
 class ConversationSummary(BaseModel):

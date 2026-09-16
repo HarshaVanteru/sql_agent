@@ -15,6 +15,8 @@ export interface Message {
   sqlQuery: string | null;
   result: QueryResult | null;
   createdAt: string;
+  /** How long the agent took, in milliseconds. Assistant turns only. */
+  elapsedMs: number | null;
 }
 
 export interface ConversationSummary {
@@ -37,4 +39,5 @@ export interface Answer {
   rowCount: number;
   conversationId: string | null;
   message: string | null;
+  elapsedMs: number | null;
 }

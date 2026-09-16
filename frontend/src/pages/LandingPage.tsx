@@ -42,8 +42,6 @@ export function LandingPage() {
 
   return (
     <main className="min-h-dvh bg-paper">
-      <div className="h-[3px] w-full bg-clock" />
-
       <div className="mx-auto max-w-4xl px-6 py-16 sm:py-24">
         <h1 className="max-w-[14ch] text-display font-bold text-ink">
           Ask your database anything. For 24 hours.

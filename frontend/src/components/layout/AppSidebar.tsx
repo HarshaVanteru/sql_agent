@@ -56,9 +56,12 @@ export function AppSidebar({ open, onClose, children }: AppSidebarProps) {
         ref={ref}
         aria-hidden={hidden ? 'true' : undefined}
         className={cn(
-          'flex w-72 shrink-0 flex-col divide-y divide-rule border-r border-rule bg-surface',
-          'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:w-[17rem]',
-          'max-lg:shadow-[0_0_40px_-8px_rgba(16,28,43,0.35)]',
+          // Wider than the old 18rem: the target-database card and the
+          // timestamps down the right of the history both need the room, and
+          // at 18rem every conversation title was truncating.
+          'flex w-[19.5rem] shrink-0 flex-col border-r border-rule bg-surface',
+          'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40',
+          'max-lg:shadow-[0_0_40px_-8px_rgba(18,26,23,0.3)]',
           'max-lg:transition-transform max-lg:duration-200 motion-reduce:max-lg:transition-none',
           open ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-full max-lg:pointer-events-none',
           'lg:static lg:translate-x-0 lg:shadow-none lg:pointer-events-auto',

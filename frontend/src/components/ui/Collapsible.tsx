@@ -40,7 +40,13 @@ export function Collapsible({ children, collapsedHeight = 320 }: CollapsibleProp
         <div ref={ref}>{children}</div>
         {!expanded && overflows && (
           // Signals there is more below without a hard edge mid-sentence.
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-paper to-transparent" />
+          //
+          // `from-raised`, matching the card this sits inside. It used to fade
+          // to `paper`, which was right when the answer sat directly on the
+          // page -- on a white card the same gradient painted a grey band
+          // across the last visible line and read as a rendering fault rather
+          // than as "there is more".
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-raised to-transparent" />
         )}
       </div>
       {overflows && (

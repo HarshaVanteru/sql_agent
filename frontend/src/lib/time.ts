@@ -36,3 +36,26 @@ export function formatDuration(ms: number): string {
 export function formatTime(isoTimestamp: string): string {
   return new Date(isoTimestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+
+/**
+ * The heading a timestamp belongs under in the history list: "Today",
+ * "Yesterday", then the date itself.
+ *
+ * Compared by calendar day rather than by elapsed hours, so something asked at
+ * 11pm is still "Today" at 11:30pm and becomes "Yesterday" at midnight --
+ * which is how people talk about it, and not what a 24-hour window would say.
+ */
+export function dayLabel(isoTimestamp: string, now: Date = new Date()): string {
+  const then = new Date(isoTimestamp);
+  const days = calendarDaysBetween(then, now);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return then.toLocaleDateString([], { weekday: 'long' });
+  return then.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function calendarDaysBetween(earlier: Date, later: Date): number {
+  const a = new Date(earlier.getFullYear(), earlier.getMonth(), earlier.getDate());
+  const b = new Date(later.getFullYear(), later.getMonth(), later.getDate());
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+}

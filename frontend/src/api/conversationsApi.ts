@@ -14,6 +14,7 @@ interface MessagePayload {
   sql_query: string | null;
   result: ResultPayload | null;
   created_at: string;
+  elapsed_ms: number | null;
 }
 
 interface SummaryPayload {
@@ -39,6 +40,7 @@ interface AnswerPayload {
   row_count: number;
   conversation_id: string | null;
   message: string | null;
+  elapsed_ms: number | null;
 }
 
 function toResult(payload: ResultPayload | null): QueryResult | null {
@@ -54,6 +56,9 @@ function toMessage(payload: MessagePayload): Message {
     sqlQuery: payload.sql_query,
     result: toResult(payload.result),
     createdAt: payload.created_at,
+    // Absent on user turns, and on assistant turns recorded before the server
+    // started reporting it.
+    elapsedMs: payload.elapsed_ms ?? null,
   };
 }
 
@@ -108,6 +113,7 @@ export const conversationsApi = {
       rowCount: payload.row_count,
       conversationId: payload.conversation_id,
       message: payload.message,
+      elapsedMs: payload.elapsed_ms ?? null,
     };
   },
 };

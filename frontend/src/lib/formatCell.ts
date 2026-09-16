@@ -11,8 +11,14 @@ export function formatCell(value: unknown): string {
   return String(value);
 }
 
-/** Numbers are read by comparing digits, so they belong on the right. */
-export function isNumeric(value: unknown): boolean {
+/**
+ * Numbers are read by comparing digits, so they belong on the right.
+ *
+ * A type predicate, not a plain boolean: every caller goes on to do arithmetic
+ * with the value it just checked, and without the narrowing each of them needs
+ * a cast that asserts exactly what this function already proved.
+ */
+export function isNumeric(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 

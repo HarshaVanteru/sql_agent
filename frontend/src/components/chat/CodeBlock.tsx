@@ -26,9 +26,13 @@ export function CodeBlock({ code, label }: CodeBlockProps) {
   }
 
   return (
-    <div className="w-full overflow-hidden rounded border border-rule bg-surface">
-      <div className="flex items-center justify-between border-b border-rule px-3 py-1.5">
-        <span className="text-xs font-medium text-slate">{label}</span>
+    // Card treatment shared with the result card below it: same radius, same
+    // white fill, same tinted header. On the old cool-grey palette a cream
+    // block at a 4px radius sat fine among its neighbours; on this one it read
+    // as an unstyled box dropped between two finished cards.
+    <div className="w-full overflow-hidden rounded-xl border border-rule bg-raised">
+      <div className="flex items-center justify-between border-b border-rule bg-paper px-4 py-2.5">
+        <span className="font-mono text-[0.6875rem] tracking-wide text-muted">{label}</span>
         <button
           type="button"
           onClick={copy}
@@ -37,7 +41,7 @@ export function CodeBlock({ code, label }: CodeBlockProps) {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[0.8125rem] leading-relaxed text-ink">
+      <pre className="overflow-x-auto px-4 py-3 font-mono text-[0.8125rem] leading-relaxed text-ink">
         <code>{code}</code>
       </pre>
     </div>

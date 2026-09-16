@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -124,6 +125,10 @@ async def ask(
             history_messages=len(history),
         )
 
+    # Measured around the agent alone -- not the Redis reads above or the
+    # writes below -- so the number answers "how long did the work take" rather
+    # than "how busy was the event loop".
+    started = time.perf_counter()
     try:
         # The agent is synchronous and makes several LLM calls, so it has to run
         # off the event loop or it stalls every other request for its duration.
@@ -158,6 +163,7 @@ async def ask(
             detail={"code": "QUERY_ERROR", "message": error},
         )
 
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
     generated_query = agent_result.get("query")
     result_data = agent_result.get("result") or {}
     columns = result_data.get("columns", [])
@@ -210,6 +216,7 @@ async def ask(
                 "sql_query": generated_query,
                 "result": result_snapshot,
                 "created_at": now,
+                "elapsed_ms": elapsed_ms,
             }
         ),
     )
@@ -219,8 +226,10 @@ async def ask(
     await store.touch_expiry(redis, session)
 
     logfire.info(
-        "Agent answered with {row_count} row(s) in conversation {conversation_id}",
+        "Agent answered with {row_count} row(s) in {elapsed_ms}ms "
+        "in conversation {conversation_id}",
         row_count=len(rows),
+        elapsed_ms=elapsed_ms,
         conversation_id=conversation_id,
     )
     return NaturalLanguageQueryResponse(
@@ -230,6 +239,7 @@ async def ask(
         row_count=len(rows),
         conversation_id=conversation_id,
         message=message,
+        elapsed_ms=elapsed_ms,
     )
 
 
