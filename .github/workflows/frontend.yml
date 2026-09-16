@@ -124,10 +124,25 @@ jobs:
 
           test -f "$release/index.html"
 
+          # The first deploy onto a server that already had a dist/ directory
+          # finds a real directory where the symlink goes, and mv refuses to
+          # replace a directory with a non-directory. Retire it instead; from
+          # the next deploy on, dist is always a symlink and this is a no-op.
+          if [ -d "$root/dist" ] && [ ! -L "$root/dist" ]; then
+            legacy="$root/.dist-replaced-$SHA"
+            mv -T "$root/dist" "$legacy"
+          else
+            legacy=""
+          fi
+
           # Two steps so the swap is one atomic rename -- no moment where
           # frontend/dist is missing or half replaced.
           ln -sfn "$release" "$root/dist.tmp"
           mv -Tf "$root/dist.tmp" "$root/dist"
+
+          if [ -n "$legacy" ]; then
+            rm -rf "$legacy"
+          fi
 
           # Keep three: whatever is live, plus the two most recent others.
           # Excluding the live one by name matters after a manual rollback --
@@ -135,7 +150,10 @@ jobs:
           # by age would delete the directory the symlink points at.
           current=$(basename "$(readlink -f "$root/dist")")
           cd "$root/releases"
-          ls -1dt -- */ | sed 's#/$##' | grep -vx "$current" | tail -n +3 | xargs -r rm -rf
+          # grep exits 1 when the live release is the only one, which under
+          # pipefail would fail the step after a swap that already succeeded.
+          { ls -1dt -- */ | sed 's#/$##' | grep -vx "$current" || true; } \
+            | tail -n +3 | xargs -r rm -rf
 
           echo "serving $(readlink -f "$root/dist")"
           ls "$root/dist"
