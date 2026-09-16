@@ -5,8 +5,8 @@ the wording their drivers use for failures. Everything else -- building the URL,
 pooling, running a query, shaping the result -- is identical, so it lives here
 once and `_DIALECTS` holds the differences.
 """
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 from urllib.parse import quote_plus
 
 import logfire
@@ -151,7 +151,7 @@ def create_connection(
                 "code": "CONNECTION_ERROR",
                 "message": f"Failed to connect to {dialect.label}: {str(e)}",
             },
-        )
+        ) from e
 
 
 def execute_query(engine, query: str) -> dict:
@@ -166,7 +166,7 @@ def execute_query(engine, query: str) -> dict:
             with engine.connect() as conn:
                 query_result = conn.execute(text(query))
                 columns = list(query_result.keys())
-                rows = [dict(zip(columns, row)) for row in query_result.fetchall()]
+                rows = [dict(zip(columns, row, strict=True)) for row in query_result.fetchall()]
 
             logfire.info(
                 "{label} query executed successfully - returned {row_count} rows",
@@ -185,4 +185,4 @@ def execute_query(engine, query: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "QUERY_ERROR", "message": f"Query execution failed: {str(e)}"},
-        )
+        ) from e

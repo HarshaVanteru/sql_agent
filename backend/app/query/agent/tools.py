@@ -180,7 +180,10 @@ def build_tools(engine):
                 with engine.connect() as conn:
                     result = conn.execute(text(query))
                     columns = list(result.keys())
-                    rows = [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)]
+                    rows = [
+                        dict(zip(columns, row, strict=True))
+                        for row in result.fetchmany(MAX_ROWS)
+                    ]
             except Exception as e:
                 # Handed back verbatim so the agent can correct itself from the
                 # database's own error rather than guessing.

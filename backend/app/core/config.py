@@ -102,7 +102,8 @@ class Settings(BaseSettings):
                     "Get a key from https://console.groq.com/keys -- it starts with 'gsk_'. "
                     "(Grok from xAI is a different product; its keys will not work here.)"
                     if info.field_name == "GROQ_API_KEY"
-                    else 'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+                    else "Generate one with: "
+                    'python -c "import secrets; print(secrets.token_urlsafe(48))"'
                 )
             )
         return value

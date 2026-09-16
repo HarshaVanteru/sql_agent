@@ -22,7 +22,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from redis.asyncio import Redis
 
@@ -87,7 +87,7 @@ def _all_keys(sid: str, conversation_ids: list[str]) -> list[str]:
 
 async def create(redis: Redis, name: str) -> SessionData:
     """Start a session for `name`, expiring SESSION_TTL_SECONDS from now."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session = SessionData(
         sid=new_session_id(name),
         name=name.strip(),

@@ -80,8 +80,13 @@ def _annotate_run(**metadata) -> None:
         run = get_current_run_tree()
         if run is not None:
             run.metadata.update(metadata)
-    except Exception:
-        pass
+    except Exception as error:
+        # Swallowed on purpose -- a tracing hiccup must never fail a real query
+        # -- but not silently, or tracing can break and stay broken unnoticed.
+        logfire.debug(
+            "Could not annotate the LangSmith run ({error_type})",
+            error_type=type(error).__name__,
+        )
 
 
 @traceable(
@@ -128,7 +133,7 @@ def run_agent(
         stopped_early = False
         final_text = ""
 
-        for iterations in range(1, MAX_ITERATIONS + 1):
+        for iterations in range(1, MAX_ITERATIONS + 1):  # noqa: B007 -- read after the loop
             response = model.invoke(messages)
             messages.append(response)
 

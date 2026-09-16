@@ -45,11 +45,23 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements*.txt
 
-      - run: pip install -r requirements.txt pytest
+      # requirements-dev.txt pulls in requirements.txt itself, so runtime deps
+      # and test deps each stay described in exactly one place.
+      - run: pip install -r requirements-dev.txt
 
-      - run: pytest -q
+      - name: Lint
+        run: ruff check .
+
+      # Runs from backend/ (see defaults.run.working-directory). pyproject.toml
+      # puts that directory on sys.path via `pythonpath`, which is what makes
+      # `import app` work here: the bare `pytest` console script does not add
+      # the working directory the way `python -m pytest` does, so before that
+      # config existed this step failed at collection with "No module named
+      # 'app'". No Redis service container is needed -- the suite uses fakeredis.
+      - name: Test
+        run: pytest
 
   build:
     # Nothing is published from a pull request -- it only has to prove it builds.
@@ -152,15 +164,21 @@ jobs:
           ssh deploy "DEPLOY_DIR='$DEPLOY_DIR' bash -s" <<'REMOTE'
           set -euo pipefail
           for _ in $(seq 1 30); do
-            # /health answers 200 with "degraded" when Redis is unreachable, so
-            # the status code alone is not enough -- check what it actually says.
-            if curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"'; then
-              echo "healthy"
+            # /health/ready, not /health. Liveness only says the process is up,
+            # which it would be even with Redis gone -- and a deploy that came
+            # back up unable to reach its only datastore has not succeeded.
+            # Readiness returns 503 in that case, so -f is enough here.
+            if curl -fsS http://127.0.0.1:8000/health/ready >/dev/null; then
+              echo "ready"
               exit 0
             fi
             sleep 2
           done
-          echo "the API did not answer /health within 60s" >&2
+          echo "the API was not ready within 60s" >&2
+          curl -sS -o /dev/null -w 'last /health status: %{http_code}\n' \
+            http://127.0.0.1:8000/health || true
+          curl -sS -w '\nlast /health/ready body above, status: %{http_code}\n' \
+            http://127.0.0.1:8000/health/ready || true
           cd "$DEPLOY_DIR" && docker compose logs --tail=80 askyourdatabase
           exit 1
           REMOTE

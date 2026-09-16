@@ -32,7 +32,8 @@ def allowed(query: str, **kwargs) -> bool:
         "SELECT COUNT(*) FROM users",
         "SELECT * FROM users;",  # a single trailing semicolon is still one statement
         "  \n SELECT 1 \n ",
-        "WITH recent AS (SELECT * FROM orders WHERE created_at > '2024-01-01') SELECT * FROM recent",
+        "WITH recent AS (SELECT * FROM orders WHERE created_at > '2024-01-01') "
+        "SELECT * FROM recent",
         "SELECT o.total, c.name FROM orders o JOIN customers c ON c.id = o.customer_id",
         "SELECT * FROM users WHERE note = 'delete from users'",  # a write only inside a literal
     ],

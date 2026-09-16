@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import logfire
 from fastapi import HTTPException, status
@@ -83,7 +83,7 @@ def _verify_credentials(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "INVALID_CREDENTIALS", "message": error_msg},
-            )
+            ) from e
         logfire.info(
             "{label} credentials validated for {host}:{port}/{database_name}",
             label=label,
@@ -138,7 +138,7 @@ async def create_connection_for_session(
         "username": creds.username,
         "password": encrypt(creds.password),
         "database_name": creds.database_name,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     await redis.hset(key, connection_id, json.dumps(record))
     # The hash may have just been created, which gives it no expiry of its own.
@@ -173,7 +173,7 @@ def record_password(record: dict) -> str:
                 "code": "CREDENTIALS_ERROR",
                 "message": "Stored credentials could not be read. Reconnect the database.",
             },
-        )
+        ) from e
 
 
 async def list_connections(session: SessionData, redis: Redis) -> ConnectionListResponse:

@@ -20,8 +20,9 @@
     "noEmit": true,
     "skipLibCheck": true,
 
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

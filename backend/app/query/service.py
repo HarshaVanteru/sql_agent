@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import logfire
 from fastapi import HTTPException, status
@@ -16,6 +16,7 @@ from app.connections import service as connections_service
 from app.core.config import settings
 from app.query.agent.errors import classify as classify_model_failure
 from app.query.agent.loop import run_agent
+
 # Imported as a module: this package also defines a create_connection.
 from app.query.databases import connections as target_db
 from app.session import store
@@ -36,7 +37,7 @@ MAX_HISTORY_MESSAGES = settings.MAX_HISTORY_MESSAGES
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 async def _load_conversation(
@@ -147,7 +148,7 @@ async def ask(
         raise HTTPException(
             status_code=failure.status_code,
             detail={"code": failure.code, "message": failure.message},
-        )
+        ) from e
 
     if not agent_result.get("valid") or agent_result.get("error"):
         error = agent_result.get("error", "Query generation failed")
@@ -260,7 +261,7 @@ async def list_conversations(
                 updated_at=datetime.fromisoformat(record["updated_at"]),
                 message_count=count,
             )
-            for (cid, record), count in zip(mine.items(), counts)
+            for (cid, record), count in zip(mine.items(), counts, strict=True)
         ),
         key=lambda c: c.updated_at,
         reverse=True,
