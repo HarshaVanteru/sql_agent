@@ -1,4 +1,4 @@
-import { ApiError } from './ApiError';
+import { ApiError, type ErrorDebug } from './ApiError';
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
 
@@ -14,19 +14,21 @@ interface RequestOptions {
  * Turn an error body into an ApiError.
  *
  * The backend normalises its own validation failures into the same
- * {code, message, fields} shape as everything else (see app/core/errors.py),
- * so there is one shape to read here.
+ * {code, message, fields, debug} shape as everything else (see
+ * app/core/errors.py), so there is one shape to read here. `debug` is only
+ * present when the backend is configured to send diagnostics.
  */
 function readError(status: number, payload: unknown): ApiError {
   const detail = (payload as { detail?: unknown } | null)?.detail;
 
   if (detail && typeof detail === 'object' && 'code' in detail) {
-    const { code, message, fields } = detail as {
+    const { code, message, fields, debug } = detail as {
       code: string;
       message?: string;
       fields?: Record<string, string>;
+      debug?: ErrorDebug;
     };
-    return new ApiError(status, code, message ?? 'Request failed.', fields ?? {});
+    return new ApiError(status, code, message ?? 'Request failed.', fields ?? {}, debug);
   }
 
   if (typeof detail === 'string') return new ApiError(status, 'ERROR', detail);

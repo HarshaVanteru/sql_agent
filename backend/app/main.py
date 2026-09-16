@@ -3,6 +3,15 @@
 No accounts, no database of its own: a visitor gives a name, gets a session that
 lasts 24 hours, connects their own database, and asks questions of it.
 """
+
+# Running it locally:
+#
+#   python3 -m venv .venv            # once
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#   uvicorn app.main:app --reload --port 8000
+#
+# `which python` says whether the venv is the one that is active.
 from contextlib import asynccontextmanager
 
 import logfire

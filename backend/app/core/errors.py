@@ -4,6 +4,18 @@ Everything the app raises itself already looks like:
 
     {"detail": {"code": "INVALID_CREDENTIALS", "message": "..."}}
 
+`code` is what a caller branches on and `message` is written to be read by a
+person. Neither says what actually broke, so while EXPOSE_ERROR_DETAILS is on a
+third key carries that too:
+
+    {"detail": {"code": "MODEL_RATE_LIMITED",
+                "message": "The AI service is busy. Wait a moment and ask again.",
+                "debug": {"type": "RateLimitError",
+                          "error": "Error code: 429 - {...}",
+                          "hint": "Groq rate limit reached -- per-minute tokens ..."}}}
+
+`debug` is diagnostic, never something to show a visitor or branch on.
+
 The handlers here make that true of the failures it does *not* raise itself --
 a validation error from FastAPI, a Redis that went away, a bug nobody planned
 for. Without them those reach the client as a bare 500 with an empty body and
@@ -14,6 +26,8 @@ None of this stops the process. An exception in a handler has never taken the
 server down -- it fails that one request. What it used to do was fail it
 *rudely*, and that is what changes here.
 """
+import re
+
 import logfire
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +36,46 @@ from redis.exceptions import AuthenticationError as RedisAuthError
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
+
+from app.core.config import settings
+from app.core.redis import redacted_url
+
+# A provider can answer with a whole JSON document. Enough of it to recognise
+# the failure, not so much that the response becomes the error body.
+_MAX_DEBUG_CHARS = 1_000
+
+# scheme://user:password@host -> scheme://user:***@host. Exception text quotes
+# connection URLs freely -- Redis, SQLAlchemy, driver errors all do it -- and a
+# debug block is the one thing here that gets pasted into a chat or an issue.
+_CREDENTIAL_IN_URL = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)([^:/\s@]*):[^@/\s]*@")
+
+
+def debug_details(error: Exception | None = None, hint: str = "") -> dict:
+    """The `debug` block that rides along with an error, when it is allowed to.
+
+    Three things, each answering a different question:
+
+        type   what was raised, which names the failure precisely
+        error  what the upstream actually said, scrubbed of credentials
+        hint   what to go and change, written for whoever operates this
+
+    Returns a mapping to splat rather than a value to assign, so the call site
+    reads the same whether EXPOSE_ERROR_DETAILS is on or off:
+    `**debug_details(exc, hint)` is either a `debug` key or nothing at all, and
+    turning it off needs no edit anywhere but .env.
+    """
+    if not settings.EXPOSE_ERROR_DETAILS:
+        return {}
+
+    debug: dict[str, str] = {}
+    if error is not None:
+        debug["type"] = type(error).__name__
+        raw = _CREDENTIAL_IN_URL.sub(r"\1\2:***@", str(error)).strip()
+        if raw:
+            debug["error"] = raw[:_MAX_DEBUG_CHARS]
+    if hint:
+        debug["hint"] = hint
+    return {"debug": debug} if debug else {}
 
 
 def error_response(status_code: int, code: str, message: str, **extra) -> JSONResponse:
@@ -77,6 +131,10 @@ def register_error_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "STORAGE_AUTH_FAILED",
             "Can't reach the session store right now. Try again in a moment.",
+            # The hint, but deliberately not the exception text: the reason it
+            # is kept out of the log is the reason it stays out of here too.
+            **debug_details(hint="Redis rejected our credentials. A password-protected "
+                                 "Redis needs REDIS_URL=redis://:PASSWORD@host:port/0"),
         )
 
     @app.exception_handler(RedisConnectionError)
@@ -99,6 +157,7 @@ def register_error_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "STORAGE_UNAVAILABLE",
             "Can't reach the session store right now. Try again in a moment.",
+            **debug_details(exc, f"Redis at {redacted_url()} did not answer. Is it running?"),
         )
 
     @app.exception_handler(RedisError)
@@ -116,6 +175,7 @@ def register_error_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "STORAGE_ERROR",
             "The session store could not complete that. Try again in a moment.",
+            **debug_details(exc, f"Redis at {redacted_url()} refused the command."),
         )
 
     @app.exception_handler(Exception)
@@ -123,9 +183,10 @@ def register_error_handlers(app: FastAPI) -> None:
         """The floor.
 
         Whatever went wrong, the client gets the same shape as every other
-        error and nothing about our internals. The detail goes to the log,
-        where it belongs -- an exception type and message in a response body
-        is a map of the code for anyone who asks for it.
+        error. What went wrong goes to the log unconditionally, and into the
+        response only while EXPOSE_ERROR_DETAILS is on -- an exception type and
+        message in a response body is a map of the code for anyone who asks for
+        it, which is a fine trade here and a bad one in front of strangers.
         """
         logfire.exception(
             "Unhandled {error_type} on {method} {path}: {error}",
@@ -138,4 +199,5 @@ def register_error_handlers(app: FastAPI) -> None:
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "INTERNAL_ERROR",
             "Something went wrong on our side. Try again.",
+            **debug_details(exc, "Unhandled exception -- see the traceback in the server log."),
         )

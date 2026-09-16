@@ -12,19 +12,47 @@
  *
  * `code` is what callers branch on; `message` is already written for a reader,
  * so it is shown as-is rather than being translated into something vaguer.
+ *
+ * While the backend runs with EXPOSE_ERROR_DETAILS on, a failure also carries
+ * what actually broke:
+ *
+ *   {"detail": {"code": "MODEL_RATE_LIMITED", "message": "The AI service is busy...",
+ *               "debug": {"type": "RateLimitError", "error": "Error code: 429 - {...}",
+ *                         "hint": "Groq rate limit reached -- per-minute tokens ..."}}}
+ *
+ * That is for whoever is debugging, so it may be absent, and nothing renders it
+ * to a visitor or branches on it.
  */
+export interface ErrorDebug {
+  /** The exception the backend raised, e.g. "RateLimitError". */
+  type?: string;
+  /** What the upstream said, credentials scrubbed. Often a raw JSON body. */
+  error?: string;
+  /** What to go and change, written for whoever operates the backend. */
+  hint?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   /** Field path -> message, e.g. "credentials.host". Empty for non-validation errors. */
   readonly fields: Record<string, string>;
+  /** Diagnostics, when the backend is configured to send them. */
+  readonly debug?: ErrorDebug;
 
-  constructor(status: number, code: string, message: string, fields: Record<string, string> = {}) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields: Record<string, string> = {},
+    debug?: ErrorDebug,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.debug = debug;
   }
 
   /** The session is gone: expired, ended, or never started in this browser. */
@@ -60,4 +88,9 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong.')
 /** The per-field messages an error carries, or an empty map. */
 export function errorFields(error: unknown): Record<string, string> {
   return isApiError(error) ? error.fields : {};
+}
+
+/** The backend's diagnostics for an error, when it sent any. */
+export function errorDebug(error: unknown): ErrorDebug | undefined {
+  return isApiError(error) ? error.debug : undefined;
 }

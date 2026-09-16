@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     # blow up before any validator could split it. `cors_origins` does the work.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 
+    # ─── Errors ──────────────────────────────────────────────────────────────
+    # Attach a `debug` block -- exception type, operator hint, provider body --
+    # to every error response, alongside the message written for a reader.
+    #
+    # On by default because this is a student project: the person hitting the
+    # API is the person who has to fix it, and making them go and read the
+    # server log to learn that Groq returned a 401 is friction with no payoff.
+    # It is a switch rather than a constant because the tradeoff reverses the
+    # moment strangers can reach it -- exception types and upstream bodies are
+    # a map of the internals for anyone who asks. Set EXPOSE_ERROR_DETAILS=false
+    # in .env before that day.
+    EXPOSE_ERROR_DETAILS: bool = True
+
     # ─── Agent ───────────────────────────────────────────────────────────────
     AGENT_MAX_ITERATIONS: int = 8
     # Seconds to wait on one model call, and how many times to retry a failed

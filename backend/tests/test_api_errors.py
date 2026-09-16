@@ -41,11 +41,31 @@ def test_starting_a_session_is_503_when_redis_is_down(client_without_redis):
     assert response.json()["detail"]["code"] == "STORAGE_UNAVAILABLE"
 
 
-def test_the_503_body_does_not_leak_internals(client_without_redis):
-    """No host, no port, no exception type: the detail belongs in the log."""
-    message = client_without_redis.post("/api/session", json={"name": "Venu"}).json()
-    assert "6379" not in str(message)
-    assert "ConnectionError" not in str(message)
+def test_the_503_body_does_not_leak_internals(client_without_redis, monkeypatch):
+    """With diagnostics off, no host, no port, no exception type: the detail
+    belongs in the log and nowhere else."""
+    monkeypatch.setattr(settings, "EXPOSE_ERROR_DETAILS", False)
+    body = str(client_without_redis.post("/api/session", json={"name": "Venu"}).json())
+
+    assert "6379" not in body
+    assert "ConnectionError" not in body
+    assert "debug" not in body
+
+
+def test_diagnostics_ride_beside_the_message_not_inside_it(client_without_redis, monkeypatch):
+    """With them on, what a reader sees is unchanged.
+
+    The point of the `debug` key is that switching it on does not degrade the
+    message: the exception type and the upstream's own text go somewhere a
+    person will never be shown them by accident.
+    """
+    monkeypatch.setattr(settings, "EXPOSE_ERROR_DETAILS", True)
+    detail = client_without_redis.post("/api/session", json={"name": "Venu"}).json()["detail"]
+
+    assert detail["code"] == "STORAGE_UNAVAILABLE"
+    assert "ConnectionError" not in detail["message"]
+    assert detail["debug"]["type"] == "ConnectionError"
+    assert detail["debug"]["hint"]
 
 
 def test_reading_a_session_without_a_cookie_is_401_not_503(client):

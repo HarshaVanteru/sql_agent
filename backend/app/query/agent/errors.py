@@ -37,7 +37,8 @@ class ModelFailure:
     code: str
     """What the person reading the screen is told."""
     message: str
-    """What the log says, for whoever has to fix it. Never sent to the client."""
+    """What to go and change, for whoever has to fix it. Always logged; also
+    sent in the response's `debug` block while EXPOSE_ERROR_DETAILS is on."""
     operator_hint: str
 
 

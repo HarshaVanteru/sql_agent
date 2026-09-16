@@ -4,7 +4,7 @@ import { FormError } from '@/components/ui';
 import { useAskQuestion } from '@/hooks/useAskQuestion';
 import { useSuggestedQuestions } from '@/hooks/useSuggestedQuestions';
 import { useConversation } from '@/hooks/useConversations';
-import { errorMessage, isApiError } from '@/lib/ApiError';
+import { errorDebug, errorMessage, isApiError } from '@/lib/ApiError';
 import type { Connection } from '@/types';
 import { AskForm } from './AskForm';
 import { ChatEmptyState } from './ChatEmptyState';
@@ -73,6 +73,7 @@ export function ChatPanel({
           )}
           <FormError
             message={askError ? errorMessage(askError, 'The question could not be answered.') : null}
+            debug={errorDebug(askError)}
           />
           <AskForm
             onAsk={(question) =>

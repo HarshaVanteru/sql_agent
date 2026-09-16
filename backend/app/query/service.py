@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 
 from app.connections import service as connections_service
 from app.core.config import settings
+from app.core.errors import debug_details
 from app.query.agent.errors import classify as classify_model_failure
 from app.query.agent.loop import run_agent
 
@@ -141,9 +142,10 @@ async def ask(
             database_name=record["database_name"],
         )
     except Exception as e:
-        # Never f-string the provider's exception into the reply: its str() is
-        # the raw JSON body it sent us, which belongs in the log and nowhere
-        # near a chat bubble.
+        # Never f-string the provider's exception into `message`: its str() is
+        # the raw JSON body it sent us, which is not a sentence to put in a chat
+        # bubble. It travels in `debug` instead, where a reader can ignore it and
+        # whoever is fixing this can read it -- see debug_details.
         failure = classify_model_failure(e)
         logfire.exception(
             "Agent failed ({error_type}): {hint}",
@@ -152,7 +154,11 @@ async def ask(
         )
         raise HTTPException(
             status_code=failure.status_code,
-            detail={"code": failure.code, "message": failure.message},
+            detail={
+                "code": failure.code,
+                "message": failure.message,
+                **debug_details(e, failure.operator_hint),
+            },
         ) from e
 
     if not agent_result.get("valid") or agent_result.get("error"):
