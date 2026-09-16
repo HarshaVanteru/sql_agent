@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { FormError, TextField } from '@/components/ui';
 import { errorMessage, isApiError } from '@/lib/ApiError';
 import { DatabaseTypeField } from './DatabaseTypeField';
-import { SampleConnections } from './SampleConnections';
+import { SampleConnectionList } from './SampleConnectionList';
 import type { SampleConnection } from './sampleConnections';
 import type { useConnectionDraft } from './useConnectionDraft';
 
@@ -46,7 +46,7 @@ export function ConnectionForm({ form, formId, samples, pending, error, onSubmit
 
   return (
     <form id={formId} onSubmit={handleSubmit} noValidate className="flex flex-col gap-3.5">
-      <SampleConnections samples={samples} onPick={pickSample} disabled={pending} />
+      <SampleConnectionList samples={samples} onPick={pickSample} disabled={pending} />
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         <TextField
