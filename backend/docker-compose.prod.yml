@@ -1,0 +1,59 @@
+# The stack as it runs on the server, at /var/www/html/askyourdatabase.
+#
+# Copy this file there as docker-compose.yml, and .env.prod there as .env.
+# Those two files are all the server needs -- the source is never checked out on
+# it, and the image comes from GHCR.
+#
+# Two differences from the local compose file:
+#   - askyourdatabase pulls a built image instead of building from source
+#   - Redis requires a password and publishes no port at all
+#
+# BACKEND_IMAGE is rewritten in .env by the deploy workflow on every release.
+# To roll back by hand, point it at an older sha and `docker compose up -d`.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: askyourdatabase-redis
+    # No ports. Redis is reachable only from the compose network, by the one
+    # service that needs it. The password is a second lock on that door: if the
+    # network is ever misconfigured, an open Redis is a full session takeover.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # Through a shell so the password comes from the environment rather than
+    # sitting in the container's command line for anyone running `docker ps`.
+    entrypoint: ["sh", "-c"]
+    command:
+      # No persistence: every key here expires within 24 hours by design, so
+      # surviving a restart buys nothing and an AOF file only costs disk. The
+      # eviction policy is the backstop if sessions ever outpace the memory cap.
+      - >
+        exec redis-server
+        --requirepass "$$REDIS_PASSWORD"
+        --save ""
+        --appendonly no
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  askyourdatabase:
+    image: ${BACKEND_IMAGE:-ghcr.io/harshavanteru/askyourdatabase-backend:latest}
+    container_name: askyourdatabase
+    env_file: .env
+    environment:
+      # Built here rather than in .env so the password is written down once.
+      # This overrides whatever .env says: inside the network, Redis is "redis".
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+    ports:
+      # Loopback only -- the reverse proxy on the host is what faces the
+      # internet, and it reaches this at http://127.0.0.1:8000.
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
