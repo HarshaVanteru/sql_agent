@@ -8,7 +8,7 @@ whatever the browser decides to keep.
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
-from redis.asyncio import Redis
+from redis.asyncio import Redis # type: ignore
 
 from app.session import store
 from app.session.store import SessionData

@@ -26,7 +26,7 @@ async def add_connection(
 
 @router.get("", response_model=ConnectionListResponse)
 async def list_connections(
-    session: CurrentSession, redis: RedisClient
+    session: CurrentSession, redis: RedisClient # type: ignore
 ) -> ConnectionListResponse:
     """Every database connected in this session."""
     return await service.list_connections(session, redis)
