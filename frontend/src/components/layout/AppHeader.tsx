@@ -9,6 +9,7 @@ interface AppHeaderProps {
   connectionName: string | null;
   time: TimeRemaining | null;
   onOpenMenu: () => void;
+  onExtendSession: () => void;
   onEndSession: () => void;
   endingSession: boolean;
 }
@@ -32,6 +33,7 @@ export function AppHeader({
   connectionName,
   time,
   onOpenMenu,
+  onExtendSession,
   onEndSession,
   endingSession,
 }: AppHeaderProps) {
@@ -74,7 +76,7 @@ export function AppHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <SessionCountdown time={time} />
+        <SessionCountdown time={time} onExtend={onExtendSession} />
         <ThemeToggle />
         <EndSessionButton onConfirm={onEndSession} pending={endingSession} />
       </div>

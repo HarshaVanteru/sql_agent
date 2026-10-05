@@ -93,3 +93,70 @@ async def test_destroy_removes_the_whole_tree(fake_redis):
     assert await store.get(fake_redis, session.sid) is None
     assert await fake_redis.exists(store.conversations_key(session.sid)) == 0
     assert await fake_redis.exists(store.messages_key(session.sid, "v1")) == 0
+
+
+async def _session_with_children(fake_redis):
+    session = await store.create(fake_redis, "Venu")
+    await fake_redis.hset(store.connections_key(session.sid), "c1", "{}")
+    await fake_redis.hset(store.conversations_key(session.sid), "v1", "{}")
+    await fake_redis.rpush(store.messages_key(session.sid, "v1"), "{}")
+    await store.touch_expiry(fake_redis, session)
+    return session
+
+
+@pytest.mark.parametrize(("duration", "days"), [("24h", 1), ("7d", 7), ("30d", 30)])
+async def test_extend_adds_to_the_current_expiry(fake_redis, monkeypatch, duration, days):
+    # Room under the cap for every option, so none is clamped.
+    monkeypatch.setattr(settings, "SESSION_MAX_LIFETIME_SECONDS", 100 * 86_400)
+    session = await _session_with_children(fake_redis)
+
+    extended = await store.extend(fake_redis, session, duration)
+
+    assert extended.expires_at - session.expires_at == store.EXTENSIONS[duration]
+    assert extended.expires_at - session.expires_at == __import__("datetime").timedelta(days=days)
+    loaded = await store.get(fake_redis, session.sid)
+    assert loaded is not None and loaded.expires_at == extended.expires_at
+
+
+async def test_extend_moves_every_key_to_the_same_new_deadline(fake_redis):
+    session = await _session_with_children(fake_redis)
+
+    extended = await store.extend(fake_redis, session, "7d")
+
+    deadline = int(extended.expires_at.timestamp())
+    for key in (
+        f"session:{session.sid}",
+        store.connections_key(session.sid),
+        store.conversations_key(session.sid),
+        store.messages_key(session.sid, "v1"),
+    ):
+        assert await fake_redis.expiretime(key) == deadline, key
+
+
+async def test_extend_is_clamped_to_the_maximum_lifetime(fake_redis):
+    session = await _session_with_children(fake_redis)
+
+    extended = await store.extend(fake_redis, session, "30d")  # 24h + 30d > 30d
+
+    cap_seconds = settings.SESSION_MAX_LIFETIME_SECONDS
+    remaining = (extended.expires_at - session.created_at).total_seconds()
+    assert remaining <= cap_seconds + 5
+    assert extended.expires_at > session.expires_at
+
+
+async def test_extend_at_the_maximum_raises(fake_redis):
+    session = await _session_with_children(fake_redis)
+    await store.extend(fake_redis, session, "30d")  # now at the cap
+    current = await store.get(fake_redis, session.sid)
+    assert current is not None
+
+    with pytest.raises(store.SessionAtMaximum):
+        await store.extend(fake_redis, current, "24h")
+
+
+async def test_extend_of_an_ended_session_raises_gone(fake_redis):
+    session = await store.create(fake_redis, "Venu")
+    await store.destroy(fake_redis, session.sid)
+
+    with pytest.raises(store.SessionGone):
+        await store.extend(fake_redis, session, "24h")

@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # 24 hours, fixed from creation rather than sliding: a session is a visit,
     # and a visit has a length.
     SESSION_TTL_SECONDS: int = 86_400
+    # A session can be extended before it ends, but never to more than this far
+    # from now. Also the lifetime of the cookie, which has to outlast the longest
+    # session; the cookie holds only the id, and Redis decides whether it is live.
+    SESSION_MAX_LIFETIME_SECONDS: int = 2_592_000
     SESSION_COOKIE_NAME: str = "sql_agent_session"
     # "none" (with SECURE=true) is what a cross-site SPA needs; "lax" is what
     # plain-HTTP localhost needs, because browsers drop SameSite=None without

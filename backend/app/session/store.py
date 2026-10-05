@@ -10,8 +10,9 @@ connected, the questions they asked -- hangs off one session id:
 
 Every one of those keys is given the *same absolute* expiry, so a session and
 everything hanging off it die together at the 24-hour mark rather than leaving
-orphaned conversations behind. The expiry is fixed at creation, not extended on
-use: a session is a visit, and a visit has a length.
+orphaned conversations behind. The expiry is not extended by use: a session is a
+visit, and a visit has a length. It moves only when the visitor asks for more
+time, through `extend`.
 
 This module owns the key names. Nothing else builds a Redis key by hand.
 """
@@ -21,10 +22,11 @@ import json
 import re
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 from redis.asyncio import Redis
+from redis.exceptions import WatchError
 
 from app.core.config import settings
 
@@ -45,6 +47,27 @@ def new_session_id(name: str) -> str:
     the suffix, knowing them would be enough to read someone else's session.
     """
     return f"{_slugify(name)}-{int(time.time())}-{secrets.token_urlsafe(12)}"
+
+
+# What a visitor may add to a session, by the name the API uses for it.
+EXTENSIONS: dict[str, timedelta] = {
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+}
+
+_EXTEND_ATTEMPTS = 5
+# The cap moves with the clock, so right after hitting it there is always a few
+# milliseconds of headroom. A gain smaller than this is not an extension.
+_MIN_GAIN = timedelta(minutes=1)
+
+
+class SessionAtMaximum(Exception):
+    """The session already has as much time left as it is allowed."""
+
+
+class SessionGone(Exception):
+    """The session expired or was ended while the request was being handled."""
 
 
 @dataclass(frozen=True)
@@ -138,6 +161,57 @@ async def touch_expiry(redis: Redis, session: SessionData) -> None:
     for key in _all_keys(session.sid, list(conversation_ids)):
         pipe.expireat(key, deadline)
     await pipe.execute()
+
+
+async def extend(redis: Redis, session: SessionData, duration: str) -> SessionData:
+    """Add `duration` to the session's expiry, and move every key to match.
+
+    The addition is to the current expiry, so asking for 7 days with 2 left
+    leaves 9. Remaining time is capped at SESSION_MAX_LIFETIME_SECONDS from now;
+    an extension that would pass the cap is cut to it, and one that would add
+    under a minute raises SessionAtMaximum.
+
+    Runs under WATCH on the session key so two extensions racing (two tabs) each
+    add their time instead of the later one overwriting the earlier.
+    """
+    delta = EXTENSIONS[duration]
+    key = _key(session.sid)
+
+    async with redis.pipeline() as pipe:
+        for _ in range(_EXTEND_ATTEMPTS):
+            try:
+                await pipe.watch(key)
+                current = await get(pipe, session.sid)  # type: ignore[arg-type]  # immediate mode
+                if current is None:
+                    raise SessionGone
+                cap = datetime.now(UTC) + timedelta(seconds=settings.SESSION_MAX_LIFETIME_SECONDS)
+                new_expiry = min(current.expires_at + delta, cap)
+                if new_expiry - current.expires_at < _MIN_GAIN:
+                    raise SessionAtMaximum
+
+                extended = replace(current, expires_at=new_expiry)
+                conversation_ids = list(await pipe.hkeys(conversations_key(session.sid)))
+                deadline = _deadline(extended)
+
+                pipe.multi()
+                pipe.set(
+                    key,
+                    json.dumps(
+                        {
+                            "name": extended.name,
+                            "created_at": extended.created_at.isoformat(),
+                            "expires_at": extended.expires_at.isoformat(),
+                        }
+                    ),
+                    exat=deadline,
+                )
+                for side_key in _all_keys(session.sid, conversation_ids)[1:]:
+                    pipe.expireat(side_key, deadline)
+                await pipe.execute()
+                return extended
+            except WatchError:
+                continue
+    raise RuntimeError("Could not extend the session: it kept changing underneath us.")
 
 
 async def destroy(redis: Redis, sid: str) -> None:

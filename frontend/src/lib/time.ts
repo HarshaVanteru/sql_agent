@@ -1,5 +1,6 @@
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 /** Milliseconds until `isoTimestamp`, floored at zero. */
 export function msUntil(isoTimestamp: string): number {
@@ -7,24 +8,20 @@ export function msUntil(isoTimestamp: string): number {
 }
 
 /**
- * How much of a window has been used, 0 to 1.
- * Drives the meter across the top of the workspace.
- */
-export function elapsedFraction(startIso: string, endIso: string): number {
-  const start = new Date(startIso).getTime();
-  const end = new Date(endIso).getTime();
-  if (end <= start) return 1;
-  return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
-}
-
-/**
- * A duration as someone would say it: "23h 41m", "48m", "under a minute".
+ * A duration as someone would say it: "6d 4h", "23h 41m", "48m", "under a minute".
  * Hours and minutes only -- seconds ticking down would pull the eye away from
  * the work for information nobody acts on.
  */
 export function formatDuration(ms: number): string {
   if (ms <= 0) return 'expired';
   if (ms < MINUTE) return 'under a minute';
+
+  // Past two days, hours are noise: "6d 4h" says everything "148h" does, faster.
+  if (ms >= 2 * DAY) {
+    const days = Math.floor(ms / DAY);
+    const rest = Math.floor((ms % DAY) / HOUR);
+    return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
+  }
 
   const hours = Math.floor(ms / HOUR);
   const minutes = Math.floor((ms % HOUR) / MINUTE);

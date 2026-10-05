@@ -6,6 +6,7 @@ import { ConnectionDialog } from '@/components/connections/ConnectionDialog';
 import { TargetDatabase } from '@/components/connections/TargetDatabase';
 import { ConversationList } from '@/components/conversations/ConversationList';
 import { NewQueryButton } from '@/components/conversations/NewQueryButton';
+import { ExtendSessionDialog } from '@/components/session/ExtendSessionDialog';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarBrand } from '@/components/layout/SidebarBrand';
@@ -28,6 +29,7 @@ export function WorkspacePage() {
   const navigate = useNavigate();
   const [connectOpen, setConnectOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
 
   const { data: session } = useSession();
   const params = useAppParams();
@@ -36,7 +38,7 @@ export function WorkspacePage() {
 
   const connections = useConnections();
   const conversations = useConversations(connectionId);
-  const time = useTimeRemaining(session?.createdAt, session?.expiresAt);
+  const time = useTimeRemaining(session?.expiresAt);
 
   const endSession = useEndSession(() => {
     params.clear();
@@ -159,6 +161,7 @@ export function WorkspacePage() {
             connectionName={selected?.name ?? null}
             time={time}
             onOpenMenu={() => setMenuOpen(true)}
+            onExtendSession={() => setExtendOpen(true)}
             onEndSession={() => endSession.mutate()}
             endingSession={endSession.isPending}
           />
@@ -193,6 +196,11 @@ export function WorkspacePage() {
         </div>
       </div>
 
+      <ExtendSessionDialog
+        open={extendOpen}
+        session={session ?? null}
+        onClose={() => setExtendOpen(false)}
+      />
       <ConnectionDialog
         open={connectOpen}
         onClose={() => setConnectOpen(false)}

@@ -125,7 +125,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     session_cookie=settings.SESSION_COOKIE_NAME,
-    max_age=settings.SESSION_TTL_SECONDS,
+    max_age=settings.SESSION_MAX_LIFETIME_SECONDS,
     same_site=settings.SESSION_COOKIE_SAMESITE,
     https_only=settings.SESSION_COOKIE_SECURE,
 )

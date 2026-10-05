@@ -1,5 +1,5 @@
 import { request } from '@/lib/apiClient';
-import type { Session } from '@/types';
+import type { ExtensionOption, Session } from '@/types';
 
 interface SessionPayload {
   session_id: string;
@@ -27,6 +27,13 @@ export const sessionApi = {
 
   async current(): Promise<Session> {
     return toSession(await request<SessionPayload>('/api/session'));
+  },
+
+  /** Adds time to the live session, on top of what it has left. */
+  async extend(duration: ExtensionOption): Promise<Session> {
+    return toSession(
+      await request<SessionPayload>('/api/session/extend', { method: 'POST', body: { duration } }),
+    );
   },
 
   /** Ends the session server-side: connections, conversations and all. */

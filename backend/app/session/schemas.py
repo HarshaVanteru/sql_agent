@@ -1,5 +1,6 @@
 """Session request and response shapes."""
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -27,3 +28,10 @@ class SessionResponse(BaseModel):
     created_at: datetime
     expires_at: datetime
     connection_count: int = 0
+
+
+ExtensionOption = Literal["24h", "7d", "30d"]
+
+
+class SessionExtendRequest(BaseModel):
+    duration: ExtensionOption
