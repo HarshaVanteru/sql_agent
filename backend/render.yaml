@@ -5,24 +5,32 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: SECRET_KEY
-        sync: false
+        generateValue: true
       - key: CREDENTIALS_KEY
         sync: false
+      # From the Key Value instance below.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sql-agent-redis
+          property: connectionString
+      # Exact origins, comma separated -- the session is a cookie, so "*" is
+      # not usable here.
       - key: CORS_ORIGINS
         sync: false
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "15"
-      - key: REFRESH_TOKEN_EXPIRE_DAYS
-        value: "30"
-      - key: DB_POOL_SIZE
-        value: "10"
-      - key: DB_MAX_OVERFLOW
-        value: "20"
+      # A browser only sends a cross-site cookie when it is SameSite=None and
+      # Secure, and Render terminates TLS, so both are required in production.
+      - key: SESSION_COOKIE_SAMESITE
+        value: "none"
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_TTL_SECONDS
+        value: "86400"
+      - key: GROQ_MODEL
+        value: "openai/gpt-oss-120b"
       - key: LANGCHAIN_TRACING_V2
         value: "false"
       - key: LANGCHAIN_ENDPOINT
@@ -35,3 +43,11 @@ services:
         value: "production"
       - key: LOGFIRE_CONSOLE
         value: "true"
+
+  - type: keyvalue
+    name: sql-agent-redis
+    plan: free
+    # Sessions expire within 24 hours anyway, so evicting under pressure is the
+    # right failure mode.
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []   # reachable only from inside the Render network

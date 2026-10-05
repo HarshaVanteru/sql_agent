@@ -1,21 +1,29 @@
-# Runtime dependencies for the SQL Agent backend
+# Runtime dependencies for the SQL Agent backend.
 fastapi
 uvicorn[standard]
+
+# Sessions: the signed cookie that carries the session id, and the store behind it.
+itsdangerous
+redis[hiredis]
+
+pydantic
+pydantic-settings
+
+# Connecting to the databases visitors bring. Synchronous drivers on purpose --
+# the agent is synchronous and runs in a threadpool.
 sqlalchemy
-aiomysql
 pymysql
 psycopg2-binary
-alembic
-python-dotenv
 cryptography
-python-jose[cryptography]
-bcrypt
-email-validator
-pydantic
+
+# The agent.
 langchain-core
 langchain-groq
 langsmith
+
+# Observability.
 logfire
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-sqlalchemy
 opentelemetry-instrumentation-httpx
+opentelemetry-instrumentation-redis

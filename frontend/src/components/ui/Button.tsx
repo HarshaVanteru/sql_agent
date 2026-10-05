@@ -1,0 +1,57 @@
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+
+import { cn } from '@/lib/cn';
+import { Spinner } from './Spinner';
+
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Size = 'sm' | 'md';
+
+const VARIANTS: Record<Variant, string> = {
+  primary: 'bg-signal text-signal-on hover:bg-signal-hover',
+  secondary: 'bg-raised text-ink border border-rule hover:border-ink',
+  ghost: 'text-slate hover:text-ink hover:bg-paper',
+  danger: 'text-danger border border-danger/30 hover:bg-danger-wash',
+};
+
+const SIZES: Record<Size, string> = {
+  sm: 'h-8 px-3 text-sm',
+  // Matches the 36px control height, so a button sitting in a form row lines up
+  // with the inputs beside it.
+  md: 'h-9 px-4 text-sm',
+};
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant;
+  size?: Size;
+  loading?: boolean;
+  children: ReactNode;
+}
+
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  disabled,
+  className,
+  children,
+  ...props
+}: ButtonProps) {
+  return (
+    <button
+      {...props}
+      disabled={disabled || loading}
+      className={cn(
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium',
+        'transition-colors duration-100',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
+        'disabled:cursor-not-allowed disabled:opacity-45',
+        VARIANTS[variant],
+        SIZES[size],
+        className,
+      )}
+    >
+      {loading && <Spinner className={variant === 'primary' ? 'text-signal-on' : 'text-slate'} />}
+      {children}
+    </button>
+  );
+}

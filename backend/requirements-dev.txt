@@ -1,0 +1,11 @@
+# Test and lint dependencies. Not installed into the runtime image -- the
+# Dockerfile only ever reads requirements.txt.
+-r requirements.txt
+
+pytest
+# The in-memory Redis the store and lifespan tests run against, so the suite
+# needs no server and CI needs no service container.
+fakeredis
+# Starlette's TestClient transport.
+httpx
+ruff
