@@ -185,7 +185,7 @@ export function AskForm({
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
               canSend
-                ? 'bg-signal text-white hover:bg-signal-hover'
+                ? 'bg-signal text-signal-on hover:bg-signal-hover'
                 : 'border border-rule bg-surface text-muted',
             )}
           >

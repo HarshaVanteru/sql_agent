@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { ThemeToggle } from '@/components/ui';
 import { SessionExpiredNotice } from '@/components/session/SessionExpiredNotice';
 import { StartSessionForm } from '@/components/session/StartSessionForm';
 import { useSession } from '@/hooks/useSession';
@@ -41,7 +42,10 @@ export function LandingPage() {
   }, [session, expired, navigate]);
 
   return (
-    <main className="min-h-dvh bg-paper">
+    <main className="relative min-h-dvh bg-paper">
+      <div className="absolute right-4 top-4 sm:right-6 sm:top-5">
+        <ThemeToggle />
+      </div>
       <div className="mx-auto max-w-4xl px-6 py-16 sm:py-24">
         <h1 className="max-w-[14ch] text-display font-bold text-ink">
           Ask your database anything. For 24 hours.

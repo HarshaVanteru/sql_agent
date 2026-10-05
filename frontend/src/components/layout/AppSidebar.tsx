@@ -49,7 +49,7 @@ export function AppSidebar({ open, onClose, children }: AppSidebarProps) {
           type="button"
           aria-label="Close menu"
           onClick={onClose}
-          className="fixed inset-0 z-30 bg-ink/30 lg:hidden"
+          className="fixed inset-0 z-30 bg-scrim/40 lg:hidden"
         />
       )}
       <aside

@@ -1,7 +1,7 @@
 import { MenuIcon } from '@/components/icons/MenuIcon';
 import { EndSessionButton } from '@/components/session/EndSessionButton';
 import { SessionCountdown } from '@/components/session/SessionCountdown';
-import { IconButton } from '@/components/ui';
+import { IconButton, ThemeToggle } from '@/components/ui';
 import type { TimeRemaining } from '@/hooks/useTimeRemaining';
 
 interface AppHeaderProps {
@@ -75,6 +75,7 @@ export function AppHeader({
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <SessionCountdown time={time} />
+        <ThemeToggle />
         <EndSessionButton onConfirm={onEndSession} pending={endingSession} />
       </div>
     </header>

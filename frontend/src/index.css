@@ -5,12 +5,61 @@
 @tailwind utilities;
 
 @layer base {
+  /* Channel triplets (not hex) so Tailwind's /opacity modifiers keep working. */
+  :root {
+    color-scheme: light;
+    --c-paper: 250 249 246;
+    --c-surface: 245 242 234;
+    --c-raised: 255 255 255;
+    --c-ink: 18 26 23;
+    --c-slate: 87 96 91;
+    --c-muted: 141 147 142;
+    --c-rule: 230 225 214;
+    --c-signal: 20 83 68;
+    --c-signal-hover: 14 62 51;
+    --c-signal-bright: 27 106 86;
+    --c-signal-deep: 18 40 31;
+    --c-signal-wash: 223 232 227;
+    --c-signal-faint: 236 253 245;
+    --c-signal-on: 255 255 255;
+    --c-clock: 180 83 9;
+    --c-clock-wash: 255 251 235;
+    --c-danger: 161 51 51;
+    --c-danger-wash: 251 237 234;
+    --c-scrim: 18 26 23;
+  }
+
+  /* Dark keeps the warmth: a green-tinted charcoal, not blue-black, and a
+     lifted green so the one accent still reads as the thing you can act on. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --c-paper: 16 20 18;
+    --c-surface: 22 27 24;
+    --c-raised: 29 35 32;
+    --c-ink: 232 236 233;
+    --c-slate: 166 175 169;
+    --c-muted: 128 137 131;
+    --c-rule: 46 54 50;
+    --c-signal: 76 184 152;
+    --c-signal-hover: 102 203 172;
+    --c-signal-bright: 62 168 137;
+    --c-signal-deep: 24 66 54;
+    --c-signal-wash: 30 54 46;
+    --c-signal-faint: 22 42 35;
+    --c-signal-on: 7 28 22;
+    --c-clock: 245 158 11;
+    --c-clock-wash: 44 34 14;
+    --c-danger: 242 128 118;
+    --c-danger-wash: 56 28 27;
+    --c-scrim: 0 0 0;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    @apply bg-paper text-ink antialiased;
+    @apply bg-paper transition-colors duration-200 text-ink antialiased;
     font-feature-settings: 'cv05' 1;
   }
 

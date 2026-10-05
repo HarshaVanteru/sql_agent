@@ -32,7 +32,7 @@ export function AssistantMessage({ message, connectionName }: AssistantMessagePr
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden="true"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-signal-bright font-serif text-[0.8125rem] font-semibold text-white"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-signal-bright font-serif text-[0.8125rem] font-semibold text-signal-on"
         >
           A
         </span>

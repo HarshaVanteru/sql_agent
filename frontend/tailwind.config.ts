@@ -5,46 +5,57 @@ import type { Config } from 'tailwindcss';
  * ("rule", "signal") rather than the value, so the palette can move without a
  * search-and-replace through the components.
  *
+ * Values live in index.css as CSS variables, one set per theme.
+ *
  * The palette is warm: a cream page rather than a white one, and a warm-grey
  * hairline rather than a blue-grey one. Against that, the one saturated colour
  * in the product is a deep forest green, and it is reserved for two things --
  * something you can act on, and a quantity being drawn. Everything else is
  * paper, ink, and the rules between them.
  */
+/** A colour backed by an `--c-*` channel triplet in index.css, so `/30` still works. */
+const v = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 export default {
+  darkMode: ['class', '[data-theme="dark"]'],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
         /** The workspace canvas. */
-        paper: '#FAF9F6',
+        paper: v('paper'),
         /** Chrome that should sit back from the canvas: the sidebar, table heads. */
-        surface: '#F5F2EA',
+        surface: v('surface'),
         /** Anything that should read as sitting on top: cards, the composer. */
-        raised: '#FFFFFF',
+        raised: v('raised'),
 
-        ink: '#121A17',
-        slate: '#57605B',
-        muted: '#8D938E',
-        rule: '#E6E1D6',
+        ink: v('ink'),
+        slate: v('slate'),
+        muted: v('muted'),
+        rule: v('rule'),
 
         /**
          * Interactive, and quantity. Forest green: buttons, the send control,
          * the bars drawn beside a number. `deep` is the question bubble, which
          * has to hold white text; `wash` tints the row you have selected.
+         * `on` is the text colour that sits on `DEFAULT` and `bright`: white in
+         * light mode, near-black in dark mode where those greens are lighter.
          */
         signal: {
-          DEFAULT: '#145344',
-          hover: '#0E3E33',
-          bright: '#1B6A56',
-          deep: '#12281F',
-          wash: '#DFE8E3',
-          faint: '#ECFDF5',
+          DEFAULT: v('signal'),
+          hover: v('signal-hover'),
+          bright: v('signal-bright'),
+          deep: v('signal-deep'),
+          wash: v('signal-wash'),
+          faint: v('signal-faint'),
+          on: v('signal-on'),
         },
 
         /** Time, and only time: the session meter and its countdown. */
-        clock: { DEFAULT: '#B45309', wash: '#FFFBEB' },
-        danger: { DEFAULT: '#A13333', wash: '#FBEDEA' },
+        clock: { DEFAULT: v('clock'), wash: v('clock-wash') },
+        danger: { DEFAULT: v('danger'), wash: v('danger-wash') },
+        /** Backdrop behind the drawer and dialogs. */
+        scrim: v('scrim'),
       },
       fontFamily: {
         sans: ['Archivo', 'system-ui', 'sans-serif'],

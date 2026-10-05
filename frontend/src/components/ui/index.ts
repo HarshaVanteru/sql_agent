@@ -11,3 +11,4 @@ export { RequiredMark } from './RequiredMark';
 export { SelectField } from './SelectField';
 export { Spinner } from './Spinner';
 export { TextField } from './TextField';
+export { ThemeToggle } from './ThemeToggle';

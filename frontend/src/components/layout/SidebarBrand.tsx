@@ -17,7 +17,7 @@ export function SidebarBrand({ onOpenSettings }: SidebarBrandProps) {
     <div className="flex items-center gap-3 px-4 pb-3 pt-4">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-signal font-serif text-lg font-semibold leading-none text-white"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-signal font-serif text-lg font-semibold leading-none text-signal-on"
       >
         A
       </span>

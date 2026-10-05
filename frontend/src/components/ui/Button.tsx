@@ -7,7 +7,7 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md';
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-signal text-white hover:bg-signal-hover',
+  primary: 'bg-signal text-signal-on hover:bg-signal-hover',
   secondary: 'bg-raised text-ink border border-rule hover:border-ink',
   ghost: 'text-slate hover:text-ink hover:bg-paper',
   danger: 'text-danger border border-danger/30 hover:bg-danger-wash',
@@ -50,7 +50,7 @@ export function Button({
         className,
       )}
     >
-      {loading && <Spinner className={variant === 'primary' ? 'text-white' : 'text-slate'} />}
+      {loading && <Spinner className={variant === 'primary' ? 'text-signal-on' : 'text-slate'} />}
       {children}
     </button>
   );
